@@ -1,7 +1,7 @@
 ---
 plan_version: 1
-last_updated: 2026-10-10T18:36:13+07:00
-repo_ref: main @ 7ffb22e (local-only: GitHub remote deleted, .github removed, single branch, no CI/promotion flow)
+last_updated: 2026-10-10T18:41:33+07:00
+repo_ref: main @ b5532fc (local-only: GitHub remote deleted, .github removed, single branch, no CI/promotion flow)
 active_wp: WP6
 ---
 
@@ -64,6 +64,7 @@ active_wp: WP6
 | RC-12 | BLOCKED_ON_USER | Hardware acceptance matrix required. |
 
 ## Log
+- 2026-10-10 Fase 1 DONE (locally-verified on `main @ b5532fc`, `cargo-llvm-cov 0.9.1 --locked`): coverage PASS 4/4 — rwp-analysis 845/928 = 91.1%, rwp-diagnostics 1622/1714 = 94.6%, rwp-report 661/713 = 92.7%, rwp-capture parser-scope 1113/1285 = 86.6% (min 85.0%). Artefak `coverage.json` dihapus, tidak di-commit. Dry-rot: nihil (tidak ada ambang/rule/versi disentuh; mutants/fuzz Fase 2).
 - 2026-10-10 Fase 0 DONE (locally-verified on `main @ 7ffb22e`, pinned 1.99.0): `docs/local-gates.md` mengikat sebagai otoritas pengganti CI; versi tetap `0.1.0` (SemVer formal Fase 6). Gate: fmt PASS (exit 0); clippy PASS (exit 0, 18.32s); test PASS (229 passed, 0 failed: analysis 36, capture 49, cli 24+2 e2e, core 4, diagnostics 24, report 21, session 21, system 21, ui 3, ui-native 24); deny 0.20.2 PASS (advisories/bans/licenses/sources ok); audit 0.22.2 PASS (1296 advisories, 484 deps, 2 allowed warnings RUSTSEC-2024-0370/0429, 0 errors); schemas PASS; docs PASS; unit checker 10/10 PASS. Pensiun: CONTRIBUTING branch/CI, seksi CI MASTER_PLAN, trailer/skip/promotion (tulis ulang Fase 7).
 - 2026-10-10 Local-only cutover: GitHub remote deleted by owner (verified dead), `.github/` removed (`31ef2d6`), single branch renamed `development` -> `main`. No promotion/merge-back/freeze/trailer rituals from here on; no CI — per-batch local gates on pinned 1.99.0 are the verification. History (670+ commits) intact as the rebuild base.
 - 2026-10-10 Promotion complete: PR #44 squash-merged to `b360373`, synced back as `4232af4`. PR validation #628 success (full suite incl. packaging, ~16m). Post-merge push #629 fails by design at the audit gate in 8s (merge commit carries no trailer; no source conclusions). Local `main` branch removed (stale `42a748b`, unrelated to canonical history). Next: dispatch mutants + fuzz baselines (owner action), then overhead/RC-05.
