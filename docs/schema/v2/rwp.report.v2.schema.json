@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ridthewann.github.io/RidTheWann-Performance/schema/rwp.report.v2.schema.json",
+  "title": "RidTheWann Performance Report v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "frame_count",
+    "frame_statistics",
+    "stutter_events",
+    "analysis_config",
+    "diagnostics",
+    "interrupted"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rwp.report.v2"
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "frame_statistics": {
+      "$ref": "#/$defs/FrameStatistics"
+    },
+    "stutter_events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StutterEvent"
+      }
+    },
+    "analysis_config": {
+      "$ref": "#/$defs/AnalysisConfigSummary"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "interrupted": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "FrameStatistics": {
+      "type": "object",
+      "required": [
+        "sample_count",
+        "mean_frame_time_ms",
+        "median_frame_time_ms",
+        "average_fps",
+        "variance_ms2",
+        "stdev_ms",
+        "percentiles",
+        "low_fps",
+        "p999_reliable"
+      ],
+      "properties": {
+        "sample_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mean_frame_time_ms": {
+          "type": "number"
+        },
+        "median_frame_time_ms": {
+          "type": "number"
+        },
+        "average_fps": {
+          "type": "number"
+        },
+        "variance_ms2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stdev_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "percentiles": {
+          "$ref": "#/$defs/PercentileSet"
+        },
+        "low_fps": {
+          "$ref": "#/$defs/LowFpsMetrics"
+        },
+        "p999_reliable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PercentileSet": {
+      "type": "object",
+      "required": [
+        "p0_1_ms",
+        "p1_ms",
+        "p5_ms",
+        "p10_ms",
+        "p50_ms",
+        "p95_ms",
+        "p99_ms",
+        "p99_9_ms"
+      ],
+      "properties": {
+        "p0_1_ms": {
+          "type": "number"
+        },
+        "p1_ms": {
+          "type": "number"
+        },
+        "p5_ms": {
+          "type": "number"
+        },
+        "p10_ms": {
+          "type": "number"
+        },
+        "p50_ms": {
+          "type": "number"
+        },
+        "p95_ms": {
+          "type": "number"
+        },
+        "p99_ms": {
+          "type": "number"
+        },
+        "p99_9_ms": {
+          "type": "number"
+        }
+      }
+    },
+    "LowFpsMetrics": {
+      "type": "object",
+      "required": [
+        "percentile_1_low_fps",
+        "percentile_0_1_low_fps",
+        "mean_fps_of_worst_1pct_frames",
+        "mean_fps_of_worst_0_1pct_frames"
+      ],
+      "properties": {
+        "percentile_1_low_fps": {
+          "type": "number"
+        },
+        "percentile_0_1_low_fps": {
+          "type": "number"
+        },
+        "mean_fps_of_worst_1pct_frames": {
+          "type": "number"
+        },
+        "mean_fps_of_worst_0_1pct_frames": {
+          "type": "number"
+        }
+      }
+    },
+    "AnalysisConfigSummary": {
+      "type": "object",
+      "required": [
+        "p999_reliability_threshold",
+        "stutter_rule_id",
+        "stutter_refresh_rate_hz",
+        "stutter_refresh_period_ms",
+        "stutter_rolling_half_window_frames",
+        "stutter_multiplier",
+        "stutter_absolute_threshold_ms",
+        "stutter_minimum_baseline_samples",
+        "stutter_merge_gap_ms"
+      ],
+      "properties": {
+        "p999_reliability_threshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stutter_rule_id": {
+          "type": "string"
+        },
+        "stutter_refresh_rate_hz": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stutter_refresh_period_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stutter_rolling_half_window_frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stutter_multiplier": {
+          "type": "number"
+        },
+        "stutter_absolute_threshold_ms": {
+          "type": "number"
+        },
+        "stutter_minimum_baseline_samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stutter_merge_gap_ms": {
+          "type": "number"
+        }
+      }
+    },
+    "StutterEvent": {
+      "type": "object",
+      "required": [
+        "start_timestamp_ns",
+        "end_timestamp_ns",
+        "peak_frame_time_ms",
+        "baseline_frame_time_ms",
+        "candidate_frame_count",
+        "detector_parameters"
+      ],
+      "properties": {
+        "start_timestamp_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_timestamp_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "peak_frame_time_ms": {
+          "type": "number"
+        },
+        "baseline_frame_time_ms": {
+          "type": "number"
+        },
+        "candidate_frame_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detector_parameters": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "Diagnostic": {
+      "type": "object",
+      "required": [
+        "category",
+        "rule_id",
+        "evidence_score",
+        "supporting_evidence",
+        "contradicting_evidence",
+        "parameters",
+        "sample_count",
+        "minimum_sample_count"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "cpu_bound",
+            "gpu_bound",
+            "frame_pacing",
+            "thermal",
+            "memory_pressure",
+            "vram_pressure",
+            "background_interference",
+            "streaming_overhead",
+            "unknown"
+          ]
+        },
+        "rule_id": {
+          "type": "string"
+        },
+        "evidence_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "supporting_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceItem"
+          }
+        },
+        "contradicting_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceItem"
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minimum_sample_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "required": [
+        "evidence_id",
+        "polarity",
+        "statement",
+        "weight"
+      ],
+      "properties": {
+        "evidence_id": {
+          "type": "string"
+        },
+        "polarity": {
+          "type": "string",
+          "enum": [
+            "supporting",
+            "contradicting"
+          ]
+        },
+        "statement": {
+          "type": "string"
+        },
+        "weight": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    }
+  }
+}

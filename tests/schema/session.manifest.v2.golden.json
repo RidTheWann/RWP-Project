@@ -1,0 +1,39 @@
+{
+  "schema_version": "rwp.session.manifest.v2",
+  "process_id": 42,
+  "application": "test",
+  "interrupted": false,
+  "display_refresh_rate_hz": null,
+  "dominant_swap_chain_address": null,
+  "discarded_frame_count": 0,
+  "frame_type_counts": [],
+  "telemetry_warning_count": 0,
+  "coverage": {
+    "frame_seconds": null,
+    "telemetry_seconds": null,
+    "intersection_seconds": null
+  },
+  "provenance": {
+    "rwp_version": "0.1.0",
+    "git_sha": null,
+    "build_target": null,
+    "build_profile": null,
+    "os": null,
+    "cpu": null,
+    "gpu": null,
+    "driver": null,
+    "presentmon_version": null,
+    "presentmon_sha256": null,
+    "qpc_frequency_hz": 1,
+    "sample_interval_ms": null,
+    "exclude_dropped": null,
+    "stop_existing_session": null
+  },
+  "files": [
+    {
+      "path": "capture.json",
+      "size_bytes": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+[package]
+name = "rwp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+
+rwp-capture = { path = "../crates/rwp-capture" }
+rwp-report = { path = "../crates/rwp-report" }
+rwp-session = { path = "../crates/rwp-session" }
+
+[[bin]]
+name = "csv_strict"
+path = "fuzz_targets/csv_strict.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "csv_tolerant"
+path = "fuzz_targets/csv_tolerant.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "report_json"
+path = "fuzz_targets/report_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "session_json"
+path = "fuzz_targets/session_json.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1

@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ridthewann.github.io/RidTheWann-Performance/schema/rwp.session.manifest.v2.schema.json",
+  "title": "RidTheWann Performance Session Manifest v2",
+  "type": "object",
+  "required": [
+    "provenance",
+    "schema_version",
+    "process_id",
+    "application",
+    "interrupted",
+    "display_refresh_rate_hz",
+    "dominant_swap_chain_address",
+    "discarded_frame_count",
+    "frame_type_counts",
+    "telemetry_warning_count",
+    "coverage",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rwp.session.manifest.v2"
+    },
+    "process_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "application": {
+      "type": "string"
+    },
+    "interrupted": {
+      "type": "boolean"
+    },
+    "display_refresh_rate_hz": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "dominant_swap_chain_address": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "discarded_frame_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "frame_type_counts": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer",
+            "minimum": 0
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "telemetry_warning_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageSummary"
+    },
+    "provenance": {
+      "$ref": "#/$defs/SessionProvenance"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SessionManifestFile"
+      }
+    }
+  },
+  "$defs": {
+    "CoverageSummary": {
+      "type": "object",
+      "required": [
+        "frame_seconds",
+        "telemetry_seconds",
+        "intersection_seconds"
+      ],
+      "properties": {
+        "frame_seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "telemetry_seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "intersection_seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "SessionProvenance": {
+      "type": "object",
+      "required": [
+        "rwp_version",
+        "git_sha",
+        "build_target",
+        "build_profile",
+        "os",
+        "cpu",
+        "gpu",
+        "driver",
+        "presentmon_version",
+        "presentmon_sha256",
+        "qpc_frequency_hz",
+        "sample_interval_ms",
+        "exclude_dropped",
+        "stop_existing_session"
+      ],
+      "properties": {
+        "rwp_version": {
+          "type": "string"
+        },
+        "git_sha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "build_target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "build_profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cpu": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gpu": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "presentmon_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "presentmon_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "qpc_frequency_hz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sample_interval_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "exclude_dropped": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "stop_existing_session": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_process_probing": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "SessionManifestFile": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

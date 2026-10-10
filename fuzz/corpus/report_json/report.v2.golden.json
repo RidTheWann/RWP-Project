@@ -1,0 +1,43 @@
+{
+  "schema_version": "rwp.report.v2",
+  "frame_count": 1,
+  "frame_statistics": {
+    "sample_count": 1,
+    "mean_frame_time_ms": 8,
+    "median_frame_time_ms": 8,
+    "average_fps": 125,
+    "variance_ms2": null,
+    "stdev_ms": null,
+    "percentiles": {
+      "p0_1_ms": 8,
+      "p1_ms": 8,
+      "p5_ms": 8,
+      "p10_ms": 8,
+      "p50_ms": 8,
+      "p95_ms": 8,
+      "p99_ms": 8,
+      "p99_9_ms": 8
+    },
+    "low_fps": {
+      "percentile_1_low_fps": 125,
+      "percentile_0_1_low_fps": 125,
+      "mean_fps_of_worst_1pct_frames": 125,
+      "mean_fps_of_worst_0_1pct_frames": 125
+    },
+    "p999_reliable": false
+  },
+  "stutter_events": [],
+  "analysis_config": {
+    "p999_reliability_threshold": 1000,
+    "stutter_rule_id": "stutter.v1.absolute",
+    "stutter_refresh_rate_hz": null,
+    "stutter_refresh_period_ms": null,
+    "stutter_rolling_half_window_frames": 2,
+    "stutter_multiplier": 2.5,
+    "stutter_absolute_threshold_ms": 20,
+    "stutter_minimum_baseline_samples": 3,
+    "stutter_merge_gap_ms": 25
+  },
+  "diagnostics": [],
+  "interrupted": false
+}

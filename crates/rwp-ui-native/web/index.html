@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Evidence-based gaming and streaming performance analyzer"
+    />
+    <title>RidTheWann Performance</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">RIDTHEWANN PERFORMANCE</p>
+          <h1>Measure. Diagnose. Prove.</h1>
+          <p class="subtitle">
+            Local Windows capture with PresentMon and system telemetry.
+          </p>
+        </div>
+        <div class="session" id="connection">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="connection-label">LOCAL SESSION</span>
+        </div>
+      </header>
+
+      <section class="capture-card">
+        <div class="capture-head">
+          <div>
+            <p class="eyebrow">LIVE SESSION</p>
+            <h2>Capture</h2>
+          </div>
+          <span class="muted" id="session-message">Ready</span>
+        </div>
+
+        <div class="capture-grid">
+          <label>
+            <span>PresentMon executable</span>
+            <input id="presentmon-executable" type="text" placeholder="C:\Tools\PresentMon.exe" autocomplete="off" />
+          </label>
+          <label>
+            <span>Output CSV</span>
+            <input id="output-file" type="text" placeholder="C:\Captures\session.csv" autocomplete="off" />
+          </label>
+          <label>
+            <span>Target PID</span>
+            <input id="process-id" type="number" min="1" step="1" placeholder="1234" />
+          </label>
+          <label>
+            <span>Duration (s)</span>
+            <input id="duration-seconds" type="number" min="1" max="3600" step="1" value="60" />
+          </label>
+          <label>
+            <span>Telemetry interval (ms)</span>
+            <input id="sample-interval-ms" type="number" min="10" max="5000" step="1" value="50" />
+          </label>
+          <label class="checkbox-row">
+            <input id="exclude-dropped" type="checkbox" />
+            <span>Exclude dropped presents</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="no-process-probing" type="checkbox" />
+            <span>Disable process/thread telemetry probing</span>
+          </label>
+        </div>
+
+        <div class="capture-actions">
+          <button class="primary" id="start-session">Start capture</button>
+          <button class="secondary" id="stop-session" disabled>Stop</button>
+          <button class="ghost" id="reset-session">Reset</button>
+        </div>
+
+        <p class="capture-note" id="runtime-note">
+          PresentMon runs out-of-process. The session backend shares one QPC timebase
+          between PresentMon frame timestamps and Windows telemetry. Disabling process
+          probing keeps system CPU/RAM telemetry and PresentMon frame capture, but omits
+          per-process thread/background activity and target-GPU telemetry.
+        </p>
+      </section>
+
+      <nav class="tabs" aria-label="Dashboard">
+        <button class="tab active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="stutters">Stutters</button>
+        <button class="tab" data-tab="diagnostics">Diagnostics</button>
+        <button class="tab" data-tab="compare">Compare</button>
+      </nav>
+
+      <main>
+        <section class="capture-card" id="history-card">
+          <div class="capture-head">
+            <div>
+              <p class="eyebrow">PERSISTED SESSIONS</p>
+              <h2>History</h2>
+            </div>
+            <button class="ghost" id="refresh-history">Refresh</button>
+          </div>
+          <div id="history-list" class="diagnostics">
+            <div class="diagnostic-placeholder"><div><h3>No persisted sessions</h3><p>Completed GUI captures appear here after manifest verification.</p></div></div>
+          </div>
+        </section>
+
+        <section class="panel active" data-panel="overview">
+          <div class="cards">
+            <article class="card" data-metric="average_fps">
+              <span class="label">AVERAGE FPS</span>
+              <strong>—</strong>
+              <small>Waiting for capture</small>
+            </article>
+            <article class="card" data-metric="p99_frame_time">
+              <span class="label">P99 FRAME TIME</span>
+              <strong>—</strong>
+              <small>Tail latency</small>
+            </article>
+            <article class="card" data-metric="one_percent_low">
+              <span class="label">1% LOW</span>
+              <strong>—</strong>
+              <small>Waiting for capture</small>
+            </article>
+            <article class="card" data-metric="stutter_events">
+              <span class="label">STUTTER EVENTS</span>
+              <strong>—</strong>
+              <small>Local-median detector</small>
+            </article>
+          </div>
+
+          <div class="result-summary" id="result-summary">
+            <div>
+              <span class="label">SESSION</span>
+              <strong id="result-title">No capture loaded</strong>
+              <p id="result-detail">
+                Start a timed capture to populate the deterministic analysis model.
+              </p>
+            </div>
+            <div class="result-meta">
+              <span id="result-frames">0 frames</span>
+              <span id="result-telemetry">0 telemetry samples</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="stutters">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">FRAME PACING</p>
+              <h2>Stutter events</h2>
+            </div>
+            <span class="muted" id="stutter-count">No capture loaded</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Start</th>
+                  <th>Duration</th>
+                  <th>Peak</th>
+                  <th>Baseline</th>
+                  <th>Candidates</th>
+                </tr>
+              </thead>
+              <tbody id="stutter-body">
+                <tr><td colspan="5" class="empty-row">No capture loaded</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="diagnostics">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">EVIDENCE</p>
+              <h2>Diagnostics</h2>
+            </div>
+            <span class="muted" id="diagnostic-count">Unknown until measured</span>
+          </div>
+          <div class="diagnostics" id="diagnostic-list">
+            <div class="diagnostic-placeholder">
+              <div class="score">—<span>/100</span></div>
+              <div>
+                <h3>No diagnosis yet</h3>
+                <p>Evidence scores are heuristics, not probabilities.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="compare">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">A/B</p>
+              <h2>Baseline vs candidate</h2>
+            </div>
+            <span class="muted">Select two verified persisted sessions.</span>
+          </div>
+          <div class="compare-controls">
+            <label>
+              <span>Baseline</span>
+              <select id="compare-baseline"><option value="">Select a verified session</option></select>
+            </label>
+            <label>
+              <span>Candidate</span>
+              <select id="compare-candidate"><option value="">Select a verified session</option></select>
+            </label>
+            <label class="checkbox-row">
+              <input id="compare-same-scenario" type="checkbox" checked />
+              <span>Same intended scenario</span>
+            </label>
+            <button class="secondary" id="run-compare">Compare sessions</button>
+          </div>
+          <div class="comparison-grid">
+            <div class="compare-card">
+              <span class="label">P99 CHANGE</span>
+              <strong id="compare-p99">—</strong>
+            </div>
+            <div class="compare-card">
+              <span class="label">AVERAGE FPS</span>
+              <strong id="compare-fps">—</strong>
+            </div>
+            <div class="compare-card">
+              <span class="label">STUTTERS</span>
+              <strong id="compare-stutters">—</strong>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

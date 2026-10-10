@@ -1,0 +1,16 @@
+[package]
+name = "rwp-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rwp-analysis = { version = "0.1.0", path = "../rwp-analysis" }
+rwp-core = { version = "0.1.0", path = "../rwp-core" }
+rwp-report = { version = "0.1.0", path = "../rwp-report" }
+serde.workspace = true

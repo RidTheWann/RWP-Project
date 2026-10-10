@@ -1,0 +1,19 @@
+[package]
+name = "rwp-capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rwp-core = { version = "0.1.0", path = "../rwp-core" }
+rwp-system = { version = "0.1.0", path = "../rwp-system" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
