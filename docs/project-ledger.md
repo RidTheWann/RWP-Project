@@ -1,29 +1,45 @@
-# Project Ledger
+# Project Ledger (milestone history; authoritative live status is docs/autopilot/STATE.md)
 
-## Snapshot
+## Snapshot (0.1.0 ALPHA; for live WP/AUD/RC status see docs/autopilot/STATE.md)
 
-- Milestone: M10 (Windows release packaging foundation)
-- Workspace version: 0.1.0
+- Milestone history ends at M10 below; current alpha state (Fase 0-7 done, hardware/sign-off blocked) lives in docs/autopilot/STATE.md.
+- Workspace version: 0.1.0 (alpha; stays 0.1.0 per docs/local-gates.md §5)
 - MSRV: Rust 1.91.0
-- Development toolchain: Rust 1.99.0
+- Development toolchain: Rust 1.99.0 (pinned; every gate uses --locked)
 - Primary target: x86_64-pc-windows-msvc
 
-## ADR index
+## ADR index (titles match docs/adr/*.md filenames; supplements documented in docs/adr/README.md; numbers never renumbered)
 
 - ADR-0001 workspace boundaries: accepted
-- ADR-0002 PresentMon external process: accepted
-- ADR-0003 PresentMon CSV adapter: accepted
-- ADR-0004 CPU per-thread telemetry selection: proposed for M3
-- ADR-0005 QPC timebase: accepted
+- ADR-0002 external PresentMon capture: accepted
+- ADR-0003 version-tolerant PresentMon CSV adapter: accepted
+- ADR-0004 CPU per-thread telemetry source selection: accepted
+- ADR-0005 QPC canonical timebase: accepted
 - ADR-0006 nearest-rank statistics: accepted
 - ADR-0007 schema and benchmark identity: accepted
-- ADR-0008 evidence score semantics: accepted
-- ADR-0009 A/B methodology: accepted
-- ADR-0010 GUI technology: accepted
-- ADR-0011 privacy: accepted
-- ADR-0012 observer effect: accepted
-- ADR-0013 data-model separation: accepted
-- ADR-0014 live session orchestration: accepted
+- ADR-0008 live-session metrics: accepted
+- ADR-0009 run-level A/B inference and equivalence margins: accepted
+- ADR-0010 native GUI technology: accepted
+- ADR-0011 performance classification: accepted
+- ADR-0012 deterministic report serialization: accepted
+- ADR-0013 release artifact provenance: accepted
+- ADR-0014 live session orchestration and shared QPC timebase: accepted
+- ADR-0015 PresentMon graceful cancellation and fallback: accepted
+- ADR-0016 PresentMon version matrix: accepted
+- ADR-0017 refresh-aware stutter rule v2: accepted
+- ADR-0018 active-display refresh-rate source: accepted
+- ADR-0019 thermal and frame-pacing evidence rules: accepted
+- ADR-0020 target GPU adapter selection and vendor-neutral GPU telemetry: accepted
+- ADR-0021 sampler overhead measurement instrumentation (+ supplement): accepted
+- ADR-0022 deterministic session persistence and manifest provenance (+ supplement): accepted
+- ADR-0023 persisted CLI analysis, paired comparison, and A/A calibration (+ supplement): accepted
+- ADR-0024 GUI session history and provenance manifest (+ supplement): accepted
+- ADR-0025 opt-out for process and thread telemetry probing: accepted
+- ADR-0026 background-interference alignment contradiction: accepted
+- ADR-0027 sampler overhead single-device baseline and cadence lock: accepted
+- ADR-0028 PresentMon distribution and verification: accepted
+- ADR-0029 WebView2 runtime install mode: accepted
+- ADR-0030 no automatic updates: accepted
 
 ## M1 completion
 

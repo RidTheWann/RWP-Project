@@ -35,4 +35,4 @@ Accepted and reconstructed decisions currently relevant to implementation:
 
 ADR-0001..0008 and ADR-0011..0013 are reconstructed from the project ledger and implementation contracts; reconstruction status is explicit in each record.
 
-Supplement detail records share the same ADR number prefix: `0021-sampler-overhead-supplement-*`, `0022-session-persistence-supplement-*`, `0023-cli-analysis-supplement-*`, and `0024-gui-history-supplement-*` preserve the original detailed design text; the shorter `0021-*`, `0022-*`, `0023-*`, `0024-*` files are the canonical indexed summaries.
+Supplement detail records share the same ADR number prefix: each of ADR-0021, ADR-0022, ADR-0023, and ADR-0024 has two files (one canonical indexed summary plus one `-supplement-*` detail file preserving the original design text): `0021-sampler-overhead-supplement-*`, `0022-session-persistence-supplement-*`, `0023-cli-analysis-supplement-*`, and `0024-gui-history-supplement-*`; the shorter `0021-*`, `0022-*`, `0023-*`, `0024-*` files are the canonical indexed summaries. Numbers are never renumbered.

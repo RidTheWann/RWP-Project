@@ -7,6 +7,8 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 
 ## Unreleased
 
+## [0.1.0-alpha] - 2026-10-12
+
 ### Added
 - Add `rwp migrate` for legacy inputs: `--report` normalizes one standalone `rwp.report` JSON file (v1/v2) to the current report schema, and `--session` rewrites one persisted session with a fresh `rwp.session.manifest.v2` manifest and recomputed hashes while preserving the authored report content and provenance (migration never recomputes diagnostics; use `rwp analyze` for that).
 - Extend the native GUI without hardware: live process picker, native file/save dialogs for PresentMon paths, live capture progress with backend session events, a stutter-peak chart, two-session Compare, and remediation guidance for session failures.

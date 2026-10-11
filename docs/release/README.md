@@ -1,5 +1,7 @@
 # Local Release Artifacts (Fase 6)
 
+Release notes for this alpha: `0.1.0-alpha.md`.
+
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.
 
