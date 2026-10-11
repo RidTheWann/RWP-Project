@@ -34,6 +34,14 @@ const els = {
   compareCandidate: document.querySelector("#compare-candidate"),
   compareSameScenario: document.querySelector("#compare-same-scenario"),
   runCompare: document.querySelector("#run-compare"),
+  processSelect: document.querySelector("#process-select"),
+  refreshProcesses: document.querySelector("#refresh-processes"),
+  browsePresentmon: document.querySelector("#browse-presentmon"),
+  browseOutput: document.querySelector("#browse-output"),
+  progress: document.querySelector("#capture-progress"),
+  progressFill: document.querySelector("#capture-progress-fill"),
+  remediation: document.querySelector("#session-remediation"),
+  stutterChart: document.querySelector("#stutter-chart"),
 };
 
 let pollTimer = null;
@@ -65,6 +73,59 @@ function setMessage(message) {
   els.sessionMessage.textContent = message;
 }
 
+async function showFailure(message) {
+  setMessage(message);
+  if (!invoke || !els.remediation) return;
+  try {
+    const hint = await invoke("session_error_remediation", { message: String(message) });
+    if (hint) {
+      els.remediation.textContent = `Fix: ${hint}`;
+      els.remediation.style.display = "";
+      return;
+    }
+  } catch (error) {
+    /* remediation is best-effort; the raw message above stands alone */
+  }
+  els.remediation.style.display = "none";
+}
+
+function clearRemediation() {
+  if (els.remediation) els.remediation.style.display = "none";
+}
+
+function setProgress(running, snapshot) {
+  if (!els.progress || !els.progressFill) return;
+  if (!running || !snapshot || typeof snapshot.started_unix_ms !== "number" || !snapshot.duration_seconds) {
+    els.progress.style.display = "none";
+    return;
+  }
+  const elapsed = Math.max(0, Date.now() - snapshot.started_unix_ms) / 1000;
+  const ratio = Math.min(1, elapsed / snapshot.duration_seconds);
+  els.progress.style.display = "";
+  els.progressFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+}
+
+function drawStutterChart(stutters) {
+  const canvas = els.stutterChart;
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+  if (!stutters.length) return;
+  const peak = Math.max(...stutters.map((row) => row.peak_frame_time_ms), 1);
+  const barWidth = width / stutters.length;
+  stutters.forEach((row, index) => {
+    const barHeight = (row.peak_frame_time_ms / peak) * (height - 8);
+    const baselineHeight = (row.baseline_frame_time_ms / peak) * (height - 8);
+    context.fillStyle = "#4caf50";
+    context.fillRect(index * barWidth + 1, height - barHeight, barWidth - 2, barHeight);
+    context.fillStyle = "#ffffff";
+    context.fillRect(index * barWidth + 1, height - baselineHeight, barWidth - 2, 2);
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -94,6 +155,7 @@ function renderCompleted(snapshot) {
   els.resultTelemetry.textContent = `${snapshot.system_sample_count} telemetry samples`;
 
   const stutters = dashboard.stutters ?? [];
+  drawStutterChart(stutters);
   els.stutterCount.textContent = `${stutters.length} event${stutters.length === 1 ? "" : "s"}`;
   els.stutterBody.innerHTML = stutters.length
     ? stutters.map((row) => `
@@ -185,6 +247,8 @@ function renderSnapshot(snapshot) {
   if (snapshot.status === "idle") {
     setConnection("LOCAL SESSION", false);
     setMessage("Ready");
+    clearRemediation();
+    setProgress(false);
     setControls(false);
     return;
   }
@@ -192,13 +256,16 @@ function renderSnapshot(snapshot) {
   if (snapshot.status === "running") {
     setConnection("CAPTURING", true);
     setMessage(`PID ${snapshot.process_id} · collecting telemetry`);
+    clearRemediation();
+    setProgress(true, snapshot);
     setControls(true);
     return;
   }
 
   if (snapshot.status === "failed") {
     setConnection("SESSION ERROR", false);
-    setMessage(snapshot.message);
+    setProgress(false);
+    showFailure(snapshot.message);
     els.resultTitle.textContent = "Capture failed";
     els.resultDetail.textContent = snapshot.message;
     setControls(false);
@@ -206,6 +273,8 @@ function renderSnapshot(snapshot) {
   }
 
   if (snapshot.status === "completed") {
+    setProgress(false);
+    clearRemediation();
     renderCompleted(snapshot);
   }
 }
@@ -276,7 +345,7 @@ els.start.addEventListener("click", async () => {
     renderSnapshot(snapshot);
     startPolling();
   } catch (error) {
-    setMessage(String(error));
+    showFailure(String(error));
   }
 });
 
@@ -292,6 +361,66 @@ els.stop.addEventListener("click", async () => {
 });
 
 els.refreshHistory?.addEventListener("click", refreshHistory);
+
+async function refreshProcesses() {
+  if (!invoke || !els.processSelect) return;
+  try {
+    const entries = await invoke("session_processes");
+    const current = els.pid.value;
+    els.processSelect.innerHTML = '<option value="">Select a live process</option>' +
+      entries.map((entry) =>
+        `<option value="${entry.process_id}">${escapeHtml(entry.name)} · PID ${entry.process_id}</option>`
+      ).join("");
+    if (current) els.pid.value = current;
+  } catch (error) {
+    setMessage(String(error));
+  }
+}
+
+if (els.processSelect) {
+  refreshProcesses();
+  els.processSelect.addEventListener("change", () => {
+    if (els.processSelect.value) els.pid.value = els.processSelect.value;
+  });
+}
+
+els.refreshProcesses?.addEventListener("click", refreshProcesses);
+
+els.browsePresentmon?.addEventListener("click", async () => {
+  if (!invoke) return;
+  try {
+    const picked = await invoke("session_pick_presentmon_file");
+    if (picked) els.presentmon.value = picked;
+  } catch (error) {
+    setMessage(String(error));
+  }
+});
+
+els.browseOutput?.addEventListener("click", async () => {
+  if (!invoke) return;
+  try {
+    const picked = await invoke("session_pick_output_file");
+    if (picked) els.output.value = picked;
+  } catch (error) {
+    setMessage(String(error));
+  }
+});
+
+function listenSessionEvents() {
+  const listen = window.__TAURI__?.event?.listen;
+  if (typeof listen !== "function") return;
+  listen("rwp-session-event", (event) => {
+    const payload = event?.payload;
+    if (!payload || typeof payload.event !== "string") return;
+    if (payload.event === "started") {
+      startPolling();
+    } else {
+      refreshStatus();
+    }
+  }).catch(() => {});
+}
+
+listenSessionEvents();
 
 els.runCompare?.addEventListener("click", async () => {
   if (!invoke) {

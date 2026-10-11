@@ -23,8 +23,8 @@ use rwp_capture::{ParseMode, PresentMonCsvParser, PresentMonTarget};
 use rwp_core::SystemSample;
 use rwp_diagnostics::{DiagnosisInput, DiagnosticEngine, RuleThresholds};
 use rwp_report::{
-    CaptureDocument, PerformanceReport, StutterAnalysisConfig, build_report_with_stutter_analysis,
-    from_json, to_json, to_pretty_json, with_diagnostics,
+    CaptureDocument, PerformanceReport, REPORT_SCHEMA_VERSION, StutterAnalysisConfig,
+    build_report_with_stutter_analysis, from_json, to_json, to_pretty_json, with_diagnostics,
 };
 use rwp_session::{
     PersistedSessionInput, SessionManifest, SessionProvenance, persist_session, verify_manifest,
@@ -138,6 +138,21 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Migrate a legacy report or session to the current schema version.
+    Migrate {
+        /// Standalone report JSON file using a legacy `rwp.report` schema.
+        #[arg(long, conflicts_with = "session")]
+        report: Option<PathBuf>,
+        /// Persisted session directory using legacy schemas.
+        #[arg(long, conflicts_with = "report")]
+        session: Option<PathBuf>,
+        /// Destination file for a migrated standalone report.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Destination directory for a migrated session.
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -213,6 +228,12 @@ fn run(command: Command) -> Result<()> {
             alpha,
             output,
         } => calibrate_pairs(pairs, alpha, output),
+        Command::Migrate {
+            report,
+            session,
+            output,
+            output_dir,
+        } => migrate(report, session, output, output_dir),
     }
 }
 
@@ -462,7 +483,25 @@ fn load_session(path: &Path) -> Result<LoadedSession> {
     )?;
     ensure_json_depth(&manifest_bytes, MAX_JSON_NESTING_DEPTH)?;
     let manifest: SessionManifest = serde_json::from_slice(&manifest_bytes)?;
+    read_session_after_manifest(path, manifest)
+}
 
+/// Reads session content without manifest verification, for migrating legacy
+/// sessions whose schema stamp current readers reject. Bounds and content
+/// validation are identical to the verified path; only the schema gate is
+/// skipped because normalization is the purpose of the call.
+fn read_unverified_session(path: &Path) -> Result<LoadedSession> {
+    let manifest_bytes = read_bounded_file(
+        &path.join("manifest.json"),
+        MAX_MANIFEST_BYTES,
+        "read manifest",
+    )?;
+    ensure_json_depth(&manifest_bytes, MAX_JSON_NESTING_DEPTH)?;
+    let manifest: SessionManifest = serde_json::from_slice(&manifest_bytes)?;
+    read_session_after_manifest(path, manifest)
+}
+
+fn read_session_after_manifest(path: &Path, manifest: SessionManifest) -> Result<LoadedSession> {
     let capture_bytes = read_bounded_file(
         &path.join("capture.json"),
         MAX_CAPTURE_OR_REPORT_BYTES,
@@ -668,6 +707,70 @@ fn load_pair_runs(root: &Path) -> Result<Vec<PairedRun>> {
         });
     }
     Ok(runs)
+}
+
+fn migrate(
+    report: Option<PathBuf>,
+    session: Option<PathBuf>,
+    output: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
+) -> Result<()> {
+    match (report, session) {
+        (Some(path), None) => {
+            let destination = output.context("migrate --report requires --output")?;
+            migrate_report_file(&path, &destination)
+        }
+        (None, Some(dir)) => {
+            let destination = output_dir.context("migrate --session requires --output-dir")?;
+            migrate_session(&dir, &destination)
+        }
+        (None, None) => bail!("migrate requires --report or --session"),
+        (Some(_), Some(_)) => bail!("migrate accepts only one of --report or --session"),
+    }
+}
+
+/// Normalizes one standalone report to the current report schema version.
+///
+/// Accepted inputs are exactly the schemas `from_json` validates, so content
+/// validation is unchanged; only the version stamp is normalized, which lets
+/// legacy files flow into readers that require the current contract.
+fn migrate_report_file(source: &Path, destination: &Path) -> Result<()> {
+    let bytes = read_bounded_file(source, MAX_CAPTURE_OR_REPORT_BYTES, "read report")?;
+    ensure_json_depth(&bytes, MAX_JSON_NESTING_DEPTH)?;
+    let text = std::str::from_utf8(&bytes).context("report JSON is not UTF-8")?;
+    let mut report = from_json(text)?;
+    report.schema_version = String::from(REPORT_SCHEMA_VERSION);
+    fs::write(destination, to_json(&report)?)
+        .with_context(|| format!("write migrated report {}", destination.display()))?;
+    Ok(())
+}
+
+/// Normalizes one persisted session to the current schemas, preserving the
+/// authored report content and manifest provenance. Unlike analysis, migration
+/// never recomputes diagnostics; unlike loading, it accepts legacy manifest
+/// schema stamps and rewrites them with fresh content hashes.
+fn migrate_session(source: &Path, destination: &Path) -> Result<()> {
+    let loaded = read_unverified_session(source)?;
+    let mut report = loaded.report;
+    report.schema_version = String::from(REPORT_SCHEMA_VERSION);
+    let input = PersistedSessionInput {
+        process_id: loaded.manifest.process_id,
+        application: &loaded.manifest.application,
+        interrupted: loaded.manifest.interrupted,
+        display_refresh_rate_hz: loaded.manifest.display_refresh_rate_hz,
+        dominant_swap_chain_address: loaded.manifest.dominant_swap_chain_address,
+        discarded_frame_count: loaded.manifest.discarded_frame_count,
+        frame_type_counts: &loaded.manifest.frame_type_counts,
+        telemetry_warning_count: loaded.manifest.telemetry_warning_count,
+        coverage: &loaded.manifest.coverage,
+        capture: &loaded.capture,
+        report: &report,
+        system_samples: &loaded.system_samples,
+        source_csv: &loaded.source_csv,
+        provenance: loaded.manifest.provenance.clone(),
+    };
+    persist_session(destination, &input)?;
+    Ok(())
 }
 
 fn duration_seconds(frames: &[rwp_core::FrameSample]) -> Option<f64> {
@@ -1114,5 +1217,170 @@ mod tests {
         std::fs::remove_dir_all(&root)?;
         assert!(result.is_err());
         Ok(())
+    }
+
+    #[test]
+    fn html_escape_neutralizes_markup_and_quotes() {
+        assert_eq!(
+            super::html_escape("Game<test>&\"Co\" 'Ltd'"),
+            "Game&lt;test&gt;&amp;&quot;Co&quot; &#39;Ltd&#39;"
+        );
+    }
+
+    fn render_fixture() -> Result<
+        (rwp_report::PerformanceReport, rwp_session::SessionManifest),
+        Box<dyn std::error::Error>,
+    > {
+        let frames = (0..10_u64)
+            .map(|index| rwp_core::FrameSample::new(index * 16_000_000, 16.0))
+            .collect::<Result<Vec<_>, _>>()?;
+        let capture = rwp_report::CaptureDocument {
+            schema_version: String::from("rwp.capture.v1"),
+            frames,
+        };
+        let report = rwp_report::build_report(
+            &capture,
+            rwp_analysis::StatisticsConfig {
+                p999_reliability_threshold: 1,
+            },
+            rwp_analysis::StutterConfig::default(),
+        )?;
+        let manifest = rwp_session::SessionManifest {
+            provenance: rwp_session::SessionProvenance {
+                rwp_version: String::from("0.1.0"),
+                git_sha: None,
+                build_target: None,
+                build_profile: None,
+                os: None,
+                cpu: None,
+                gpu: None,
+                driver: None,
+                presentmon_version: None,
+                presentmon_sha256: None,
+                qpc_frequency_hz: None,
+                sample_interval_ms: None,
+                exclude_dropped: None,
+                stop_existing_session: None,
+                no_process_probing: None,
+            },
+            schema_version: String::from("rwp.session.manifest.v2"),
+            process_id: 42,
+            application: String::from("Game<test>&Co"),
+            interrupted: false,
+            display_refresh_rate_hz: None,
+            dominant_swap_chain_address: None,
+            discarded_frame_count: 0,
+            frame_type_counts: Vec::new(),
+            telemetry_warning_count: 0,
+            coverage: rwp_session::CoverageSummary {
+                frame_seconds: None,
+                telemetry_seconds: None,
+                intersection_seconds: None,
+            },
+            files: Vec::new(),
+        };
+        Ok((report, manifest))
+    }
+
+    #[test]
+    fn markdown_render_redacts_application_and_process() -> Result<(), Box<dyn std::error::Error>> {
+        let (report, manifest) = render_fixture()?;
+        let redacted = super::render_markdown(&report, &manifest, true);
+        assert!(redacted.contains("`<redacted>`"));
+        assert!(!redacted.contains("Process ID"));
+        assert!(!redacted.contains("Game"));
+
+        let open = super::render_markdown(&report, &manifest, false);
+        assert!(open.contains("Process ID: 42"));
+        assert!(open.contains("&amp;"));
+        assert!(!open.contains("Game<test>"));
+        Ok(())
+    }
+
+    #[test]
+    fn html_render_redacts_application_and_process() -> Result<(), Box<dyn std::error::Error>> {
+        let (report, manifest) = render_fixture()?;
+        let redacted = super::render_html(&report, &manifest, true);
+        assert!(redacted.contains("&lt;redacted&gt;"));
+        assert!(!redacted.contains("Process ID"));
+        assert!(redacted.starts_with("<!doctype html>"));
+
+        let open = super::render_html(&report, &manifest, false);
+        assert!(open.contains("Process ID: 42"));
+        assert!(open.contains("Game&lt;test&gt;&amp;Co"));
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_report_normalizes_legacy_schema() -> Result<(), Box<dyn std::error::Error>> {
+        let (report, _) = render_fixture()?;
+        let legacy = super::to_json(&report)?.replacen(
+            "\"schema_version\":\"rwp.report.v2\"",
+            "\"schema_version\":\"rwp.report.v1\"",
+            1,
+        );
+        assert!(legacy.contains("\"schema_version\":\"rwp.report.v1\""));
+        let root = validation_root("migrate-report")?;
+        let source = root.join("legacy.json");
+        let destination = root.join("migrated.json");
+        std::fs::write(&source, &legacy)?;
+        super::migrate_report_file(&source, &destination)?;
+        let migrated = std::fs::read_to_string(&destination)?;
+        assert!(migrated.contains("\"schema_version\":\"rwp.report.v2\""));
+        assert!(super::from_json(&migrated).is_ok());
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_report_rejects_unknown_schema() -> Result<(), Box<dyn std::error::Error>> {
+        let (report, _) = render_fixture()?;
+        let unknown = super::to_json(&report)?.replacen(
+            "\"schema_version\":\"rwp.report.v2\"",
+            "\"schema_version\":\"rwp.report.v9\"",
+            1,
+        );
+        let root = validation_root("migrate-unknown")?;
+        let source = root.join("unknown.json");
+        let destination = root.join("migrated.json");
+        std::fs::write(&source, &unknown)?;
+        let result = super::migrate_report_file(&source, &destination);
+        let error = result.err().ok_or("unknown schema must fail migration")?;
+        let report = super::classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E3000");
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_session_normalizes_legacy_manifest() -> Result<(), Box<dyn std::error::Error>> {
+        let root = validation_root("migrate-session")?;
+        let dir = persist_validation_fixture(
+            &root,
+            "legacy",
+            vec![rwp_core::FrameSample::new(0, 8.0)?],
+            vec![rwp_core::SystemSample::new(0)],
+        )?;
+        let manifest_path = dir.join("manifest.json");
+        let legacy_manifest = std::fs::read_to_string(&manifest_path)?.replacen(
+            "rwp.session.manifest.v2",
+            "rwp.session.manifest.v1",
+            1,
+        );
+        std::fs::write(&manifest_path, &legacy_manifest)?;
+        assert!(super::load_session(&dir).is_err());
+
+        let migrated = root.join("migrated");
+        super::migrate_session(&dir, &migrated)?;
+        let loaded = super::load_session(&migrated)?;
+        assert_eq!(loaded.report.schema_version, "rwp.report.v2");
+        assert_eq!(loaded.manifest.schema_version, "rwp.session.manifest.v2");
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_requires_exactly_one_source() {
+        assert!(super::migrate(None, None, None, None).is_err());
     }
 }

@@ -46,4 +46,7 @@ Error messages are intended to stay actionable without adding new telemetry or n
 
 ## Verification boundary
 
-The stable error-code contract is reviewed against the current development tree before CI. Local Rust execution is not claimed when the required toolchain is unavailable; CI remains the authoritative compile, lint, and test gate.
+The stable error-code contract is reviewed against the current tree with the
+local gate (`cargo test` over the error taxonomy plus CLI E2E). No separate
+infrastructure owns this contract; per-batch local verification is the
+authority.

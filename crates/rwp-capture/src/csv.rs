@@ -740,6 +740,63 @@ mod tests {
         }
     }
 
+    const SEED_CSV: &str =
+        include_str!("../../../fuzz/corpus/csv_strict/minimal-presentmon-v2.csv");
+
+    fn mutate_seed_bytes(seed: &[u8], cases: usize, mut apply: impl FnMut(&[u8])) {
+        let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 56) as u8
+        };
+        for _ in 0..cases {
+            let mut input = seed.to_vec();
+            let operations = usize::from(next() % 4);
+            for _ in 0..=operations {
+                let index = usize::from(next()) % (input.len() + 1);
+                match next() % 3 {
+                    0 => {
+                        if index < input.len() {
+                            input[index] ^= next() | 1;
+                        }
+                    }
+                    1 => {
+                        if index < input.len() {
+                            input.remove(index);
+                        }
+                    }
+                    _ => {
+                        if input.len() < 4096 {
+                            input.insert(index.min(input.len()), next());
+                        }
+                    }
+                }
+            }
+            apply(&input);
+        }
+    }
+
+    #[test]
+    fn seeded_corpus_mutations_do_not_panic_in_either_mode()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parser = PresentMonCsvParser::new(1_000_000)?;
+        let name_target = PresentMonTarget::ProcessName(String::from("Game.exe"));
+        let id_target = PresentMonTarget::ProcessId(42);
+        let _ = parser.parse_reader_with_mode(
+            SEED_CSV.as_bytes(),
+            &name_target,
+            ParseMode::TolerateTruncatedTail,
+        );
+        mutate_seed_bytes(SEED_CSV.as_bytes(), 256, |input| {
+            let _ = parser.parse_reader_with_mode(input, &name_target, ParseMode::Strict);
+            let _ =
+                parser.parse_reader_with_mode(input, &id_target, ParseMode::TolerateTruncatedTail);
+        });
+        Ok(())
+    }
+
     const HEADER: &str = "Application,ProcessID,CPUStartQPC,FrameTime,CPUBusy,CPUWait,GPUTime,GPUBusy,GPUWait,DisplayLatency";
     const HEADER_V2: &str = "Application,ProcessID,CPUStartQPC,FrameTime,CPUBusy,CPUWait,GPUTime,GPUBusy,GPUWait,DisplayLatency,SwapChainAddress,FrameType";
 

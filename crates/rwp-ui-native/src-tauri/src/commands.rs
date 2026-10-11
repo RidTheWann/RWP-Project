@@ -16,7 +16,8 @@ use rwp_report::{PerformanceReport, from_json};
 use rwp_session::{SessionConfig, SessionResult, SessionRunner};
 use rwp_ui::DashboardModel;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 const MAX_SESSION_ID_LENGTH: usize = 96;
 
@@ -57,6 +58,10 @@ pub enum SessionSnapshot {
     Running {
         /// Target process identifier.
         process_id: u32,
+        /// Requested capture duration in seconds, for live progress.
+        duration_seconds: u64,
+        /// Unix timestamp in milliseconds when the worker started.
+        started_unix_ms: u64,
     },
     /// A session completed and produced deterministic analysis.
     Completed {
@@ -113,6 +118,47 @@ pub struct SessionHistoryEntry {
 const MAX_SESSION_REPORT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SESSION_TELEMETRY_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_SESSION_TELEMETRY_SAMPLES: usize = 5_000_000;
+
+/// Backend session lifecycle event emitted to the webview.
+///
+/// The existing 500 ms status poll remains the fallback; events only make
+/// state transitions prompt. Payloads stay small and contain no telemetry.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case", tag = "event")]
+pub enum SessionEvent {
+    /// A capture worker started.
+    Started {
+        /// Target process identifier.
+        process_id: u32,
+        /// Requested capture duration in seconds.
+        duration_seconds: u64,
+    },
+    /// A capture worker finished and persisted analysis.
+    Completed {
+        /// Target process identifier.
+        process_id: u32,
+        /// Number of normalized frame observations.
+        frame_count: usize,
+    },
+    /// A capture worker failed before producing a complete result.
+    Failed {
+        /// Human-readable failure cause.
+        message: String,
+    },
+}
+
+fn emit_session_event<R: Runtime>(app: Option<&AppHandle<R>>, event: &SessionEvent) {
+    if let Some(app) = app {
+        let _ = app.emit("rwp-session-event", event);
+    }
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
 
 fn read_bounded_file(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
@@ -440,21 +486,40 @@ impl SessionManager {
     }
 }
 
-fn run_session_worker<F>(manager: SessionManager, operation: F)
+fn run_session_worker<F, R>(manager: SessionManager, app: Option<&AppHandle<R>>, operation: F)
 where
     F: FnOnce() -> Result<SessionResult, rwp_session::SessionError>,
+    R: Runtime,
 {
     match panic::catch_unwind(AssertUnwindSafe(operation)) {
         Ok(Ok(result)) => {
+            let event = SessionEvent::Completed {
+                process_id: result.process_id,
+                frame_count: result.report.frame_count,
+            };
             if manager.finish(result).is_ok() {
+                emit_session_event(app, &event);
                 tracing::info!(target: "rwp", event = "session_completed");
             }
         }
         Ok(Err(error)) => {
+            let message = error.to_string();
+            emit_session_event(
+                app,
+                &SessionEvent::Failed {
+                    message: message.clone(),
+                },
+            );
             tracing::warn!(target: "rwp", event = "session_failed");
-            let _ = manager.fail(error.to_string());
+            let _ = manager.fail(message);
         }
         Err(_) => {
+            emit_session_event(
+                app,
+                &SessionEvent::Failed {
+                    message: String::from("capture session worker panicked"),
+                },
+            );
             tracing::error!(target: "rwp", event = "session_failed");
             let _ = manager.fail("capture session worker panicked");
         }
@@ -504,9 +569,125 @@ pub fn session_compare(
         .ok_or_else(|| "comparison view was not produced".to_owned())
 }
 
+/// Redacted live-process identity returned to the target picker: PID plus the
+/// executable name only, matching the sampler's existing observation boundary.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessEntry {
+    /// Live process identifier.
+    pub process_id: u32,
+    /// Executable basename reported by the snapshot.
+    pub name: String,
+}
+
+/// Lists currently present processes for GUI target selection.
+///
+/// Async so the snapshot never blocks the webview main thread. Only identity
+/// is returned; utilization stays inside the sampler.
+#[tauri::command(async)]
+pub fn session_processes() -> Result<Vec<ProcessEntry>, String> {
+    rwp_system::list_processes()
+        .map(|processes| {
+            processes
+                .into_iter()
+                .map(|entry| ProcessEntry {
+                    process_id: entry.process_id,
+                    name: entry.name,
+                })
+                .collect()
+        })
+        .map_err(|error| error.to_string())
+}
+
+fn dialog_selection(selection: Option<FilePath>) -> Option<String> {
+    selection.map(|path| match path {
+        FilePath::Path(path) => path.to_string_lossy().into_owned(),
+        FilePath::Url(url) => url.to_string(),
+    })
+}
+
+/// Opens a native file picker for the PresentMon executable.
+///
+/// Returns None when the operator dismisses the dialog. Dialogs cannot run
+/// headless, so this thin wrapper stays untested by unit tests; picked paths
+/// still flow through the regular session configuration validation.
+#[tauri::command]
+pub fn session_pick_presentmon_file(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(dialog_selection(
+        app.dialog()
+            .file()
+            .add_filter("PresentMon executable", &["exe"])
+            .blocking_pick_file(),
+    ))
+}
+
+/// Opens a native save picker for the PresentMon CSV output file.
+///
+/// Returns None when the operator dismisses the dialog; see
+/// `session_pick_presentmon_file` for the headless-testing note.
+#[tauri::command]
+pub fn session_pick_output_file(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(dialog_selection(
+        app.dialog()
+            .file()
+            .add_filter("PresentMon CSV", &["csv"])
+            .blocking_save_file(),
+    ))
+}
+
+/// Maps a session failure message to actionable remediation guidance.
+///
+/// Pure substring rules over backend error text so the GUI and future callers
+/// share one remediation source. Returns None when no rule matches.
+pub fn remediation_for(message: &str) -> Option<&'static str> {
+    let rules: &[(&str, &str)] = &[
+        (
+            "PresentMon.exe",
+            "Use the official PresentMon executable; the file name must be exactly PresentMon.exe.",
+        ),
+        (
+            "Performance Log Users",
+            "Add your account to the Performance Log Users group or run elevated, then retry.",
+        ),
+        (
+            "permission",
+            "Run RWP elevated or add your account to the Performance Log Users group, then retry.",
+        ),
+        (
+            "between 10 ms and 5 s",
+            "Set the telemetry interval between 10 ms and 5000 ms.",
+        ),
+        (
+            "duration",
+            "Set the capture duration between 1 and 3600 seconds.",
+        ),
+        (
+            "greater than zero",
+            "Pick a live target process from the process list; PID 0 is never valid.",
+        ),
+        (
+            "already running",
+            "Stop or reset the active session before starting a new capture.",
+        ),
+        (
+            "worker",
+            "The capture worker failed to start; restart the application and retry.",
+        ),
+    ];
+    rules
+        .iter()
+        .find_map(|(marker, remediation)| message.contains(marker).then_some(*remediation))
+}
+
+/// Returns remediation guidance for one session failure message, if known.
+#[tauri::command]
+pub fn session_error_remediation(message: String) -> Option<String> {
+    remediation_for(&message).map(str::to_owned)
+}
+
 /// Starts one live capture session in a background worker.
 #[tauri::command]
 pub fn session_start(
+    app: AppHandle,
     request: SessionStartRequest,
     manager: State<'_, SessionManager>,
 ) -> Result<SessionSnapshot, String> {
@@ -539,14 +720,19 @@ pub fn session_start(
     config = config.with_persistence_dir(persistence_dir);
 
     let cancellation = Arc::new(AtomicBool::new(false));
+    let duration_seconds = request.duration_seconds;
+    let process_id = config.process_id;
     state.snapshot = SessionSnapshot::Running {
-        process_id: config.process_id,
+        process_id,
+        duration_seconds,
+        started_unix_ms: now_unix_ms(),
     };
     state.cancellation = Some(cancellation.clone());
     drop(state);
     tracing::info!(target: "rwp", event = "session_start_requested");
 
     let state_handle = manager.inner().state.clone();
+    let event_app = app.clone();
     match std::thread::Builder::new()
         .name("rwp-session-worker".to_owned())
         .spawn(move || {
@@ -554,12 +740,21 @@ pub fn session_start(
             let manager = SessionManager {
                 state: state_handle,
             };
-            run_session_worker(manager, || {
+            run_session_worker(manager, Some(&event_app), || {
                 let runner = SessionRunner;
                 runner.run(&config, &cancellation)
             });
         }) {
-        Ok(_worker) => manager.snapshot(),
+        Ok(_worker) => {
+            emit_session_event(
+                Some(&app),
+                &SessionEvent::Started {
+                    process_id,
+                    duration_seconds,
+                },
+            );
+            manager.snapshot()
+        }
         Err(error) => fail_session_worker_spawn(&manager, error),
     }
 }
@@ -866,6 +1061,7 @@ mod audit_regressions {
         let manager = SessionManager::default();
         run_session_worker(
             manager.clone(),
+            None::<&tauri::AppHandle<tauri::Wry>>,
             || -> Result<_, rwp_session::SessionError> {
                 panic!("synthetic worker panic");
             },
@@ -885,7 +1081,11 @@ mod audit_regressions {
                 .state
                 .lock()
                 .map_err(|_| "session state mutex was poisoned".to_owned())?;
-            state.snapshot = SessionSnapshot::Running { process_id: 42 };
+            state.snapshot = SessionSnapshot::Running {
+                process_id: 42,
+                duration_seconds: 60,
+                started_unix_ms: 0,
+            };
             state.cancellation = Some(std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )));
@@ -908,5 +1108,96 @@ mod audit_regressions {
                 .is_none()
         );
         Ok(())
+    }
+
+    #[test]
+    fn process_picker_lists_sorted_live_identities() -> Result<(), String> {
+        let entries = super::session_processes()?;
+        assert!(!entries.is_empty());
+        assert!(entries.iter().all(|entry| entry.process_id > 0));
+        assert!(entries.iter().all(|entry| !entry.name.is_empty()));
+        assert!(
+            entries
+                .windows(2)
+                .all(|pair| pair[0].process_id < pair[1].process_id)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn remediation_rules_cover_known_failures() {
+        let cases = [
+            (
+                "presentmon path must be named PresentMon.exe",
+                "exactly PresentMon.exe",
+            ),
+            (
+                "missing permission: join the Performance Log Users group",
+                "Performance Log Users",
+            ),
+            (
+                "sample_interval must be between 10 ms and 5 s",
+                "between 10 ms and 5000 ms",
+            ),
+            (
+                "duration_seconds must be greater than zero",
+                "between 1 and 3600 seconds",
+            ),
+            (
+                "process_id must be greater than zero",
+                "PID 0 is never valid",
+            ),
+            ("a capture session is already running", "Stop or reset"),
+            (
+                "failed to start capture session worker: thread quota reached",
+                "restart the application",
+            ),
+        ];
+        for (message, fragment) in cases {
+            let remediation = super::remediation_for(message)
+                .unwrap_or_else(|| panic!("no remediation for: {message}"));
+            assert!(
+                remediation.contains(fragment),
+                "remediation for {message:?} misses {fragment:?}"
+            );
+        }
+        assert!(super::remediation_for("some unknown failure").is_none());
+        assert_eq!(
+            super::session_error_remediation(String::from("a capture session is already running")),
+            Some(String::from(
+                "Stop or reset the active session before starting a new capture."
+            ))
+        );
+    }
+
+    #[test]
+    fn session_events_serialize_with_stable_tags() -> Result<(), Box<dyn std::error::Error>> {
+        let started = serde_json::to_value(super::SessionEvent::Started {
+            process_id: 42,
+            duration_seconds: 60,
+        })?;
+        assert_eq!(started["event"], "started");
+        assert_eq!(started["process_id"], 42);
+        let running = serde_json::to_value(super::SessionSnapshot::Running {
+            process_id: 42,
+            duration_seconds: 60,
+            started_unix_ms: 1_700_000_000_000,
+        })?;
+        assert_eq!(running["status"], "running");
+        assert_eq!(running["duration_seconds"], 60);
+        assert_eq!(running["started_unix_ms"], 1_700_000_000_000_u64);
+        Ok(())
+    }
+
+    #[test]
+    fn session_compare_rejects_unknown_sessions() {
+        assert!(
+            super::session_compare(
+                String::from("no-such-baseline"),
+                String::from("no-such-candidate"),
+                true,
+            )
+            .is_err()
+        );
     }
 }

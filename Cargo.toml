@@ -37,7 +37,7 @@ thiserror = "2.0.21"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry"] }
 nvml-wrapper = "0.13.0"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Performance", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Performance", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Diagnostics_ToolHelp", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_UI_WindowsAndMessaging"] }
 
 [workspace.lints.rust]
 missing_docs = "warn"

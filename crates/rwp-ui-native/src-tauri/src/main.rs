@@ -10,6 +10,7 @@ fn main() -> Result<(), tauri::Error> {
 
     tauri::Builder::default()
         .manage(commands::SessionManager::default())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::session_start,
             commands::session_stop,
@@ -18,6 +19,10 @@ fn main() -> Result<(), tauri::Error> {
             commands::session_history,
             commands::session_history_load,
             commands::session_compare,
+            commands::session_processes,
+            commands::session_pick_presentmon_file,
+            commands::session_pick_output_file,
+            commands::session_error_remediation,
         ])
         .run(tauri::generate_context!())
 }

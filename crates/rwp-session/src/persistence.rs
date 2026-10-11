@@ -445,7 +445,7 @@ fn io_error(operation: &str, error: io::Error) -> PersistenceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{PersistedSessionInput, persist_session, verify_manifest};
+    use super::{PersistedSessionInput, SessionManifest, persist_session, verify_manifest};
     use crate::CoverageSummary;
     use rwp_analysis::{StatisticsConfig, StutterConfig, compute_statistics};
     use rwp_core::{FrameSample, SystemSample};
@@ -457,6 +457,49 @@ mod tests {
     };
 
     static TEMP_DIR_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+
+    const MANIFEST_SEED_JSON: &str =
+        include_str!("../../../fuzz/corpus/session_json/session.manifest.v2.golden.json");
+
+    #[test]
+    fn seeded_manifest_mutations_do_not_panic() {
+        assert!(serde_json::from_str::<SessionManifest>(MANIFEST_SEED_JSON).is_ok());
+        let mut state = 0x8BAD_F00D_5EED_1234_u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 56) as u8
+        };
+        let seed_bytes = MANIFEST_SEED_JSON.as_bytes();
+        for _ in 0..256 {
+            let mut input = seed_bytes.to_vec();
+            let operations = usize::from(next() % 4);
+            for _ in 0..=operations {
+                let index = usize::from(next()) % (input.len() + 1);
+                match next() % 3 {
+                    0 => {
+                        if index < input.len() {
+                            input[index] ^= next() | 1;
+                        }
+                    }
+                    1 => {
+                        if index < input.len() {
+                            input.remove(index);
+                        }
+                    }
+                    _ => {
+                        if input.len() < 4096 {
+                            input.insert(index.min(input.len()), next());
+                        }
+                    }
+                }
+            }
+            if let Ok(text) = std::str::from_utf8(&input) {
+                let _ = serde_json::from_str::<SessionManifest>(text);
+            }
+        }
+    }
 
     fn temp_dir() -> PathBuf {
         let sequence = TEMP_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);

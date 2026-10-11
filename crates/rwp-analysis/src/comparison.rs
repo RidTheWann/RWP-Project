@@ -654,7 +654,7 @@ mod tests {
     use super::{
         Comparability, ComparisonConfig, ComparisonError, ComparisonInput, DeltaDirection,
         InferenceLimit, PairedInferenceConfig, PairedInferenceOutcome, PairedRun, compare,
-        minimum_pairs_for_alpha, paired_infer,
+        compare_low_fps, minimum_pairs_for_alpha, paired_infer,
     };
     use crate::{FrameStatistics, LowFpsMetrics, PercentileSet};
 
@@ -993,6 +993,415 @@ mod tests {
             Comparability::LimitedSampleEquivalence
         );
         assert!((result.sample_ratio - 0.7).abs() < 0.001);
+        Ok(())
+    }
+
+    fn paired_run(id: usize, baseline_p99: f64, candidate_p99: f64) -> PairedRun {
+        PairedRun {
+            pair_id: format!("pair-{id}"),
+            baseline_sample_count: 1_000,
+            candidate_sample_count: 1_000,
+            baseline_p99_frame_time_ms: baseline_p99,
+            candidate_p99_frame_time_ms: candidate_p99,
+        }
+    }
+
+    #[test]
+    fn paired_inference_rejects_empty_and_nonfinite_pairs() {
+        let mut zero_baseline = paired_run(0, 30.0, 28.0);
+        zero_baseline.baseline_sample_count = 0;
+        assert!(matches!(
+            paired_infer(&[zero_baseline], PairedInferenceConfig::default()),
+            Err(ComparisonError::InvalidPairSampleCount)
+        ));
+
+        let mut zero_candidate = paired_run(0, 30.0, 28.0);
+        zero_candidate.candidate_sample_count = 0;
+        assert!(matches!(
+            paired_infer(&[zero_candidate], PairedInferenceConfig::default()),
+            Err(ComparisonError::InvalidPairSampleCount)
+        ));
+
+        assert!(matches!(
+            paired_infer(
+                &[paired_run(0, f64::NAN, 28.0)],
+                PairedInferenceConfig::default()
+            ),
+            Err(ComparisonError::InvalidPairMetric)
+        ));
+        assert!(matches!(
+            paired_infer(
+                &[paired_run(0, 30.0, 0.0)],
+                PairedInferenceConfig::default()
+            ),
+            Err(ComparisonError::InvalidPairMetric)
+        ));
+        assert!(matches!(
+            paired_infer(
+                &[paired_run(0, -5.0, 28.0)],
+                PairedInferenceConfig::default()
+            ),
+            Err(ComparisonError::InvalidPairMetric)
+        ));
+        assert!(matches!(
+            paired_infer(
+                &[PairedRun {
+                    pair_id: String::new(),
+                    ..paired_run(0, 30.0, 28.0)
+                }],
+                PairedInferenceConfig::default()
+            ),
+            Err(ComparisonError::InvalidPairIdentity)
+        ));
+    }
+
+    #[test]
+    fn paired_inference_keeps_ratio_boundary_pairs() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pair = paired_run(0, 30.0, 28.0);
+        pair.candidate_sample_count = 800;
+        let result = paired_infer(&[pair], PairedInferenceConfig::default())?;
+        assert_eq!(result.comparable_pair_count, 1);
+        assert_eq!(result.excluded_pair_count, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn paired_inference_enforces_alpha_pair_minimum() {
+        let config = PairedInferenceConfig {
+            minimum_pairs: 5,
+            ..PairedInferenceConfig::default()
+        };
+        assert!(matches!(
+            paired_infer(&[], config),
+            Err(ComparisonError::InvalidMinimumPairsForAlpha)
+        ));
+        let config = PairedInferenceConfig {
+            minimum_pairs: 0,
+            ..PairedInferenceConfig::default()
+        };
+        assert!(matches!(
+            paired_infer(&[], config),
+            Err(ComparisonError::InvalidMinimumPairs)
+        ));
+    }
+
+    #[test]
+    fn paired_inference_rejects_invalid_ratio_and_margin() {
+        for ratio in [0.0, f64::NAN, 2.0] {
+            let config = PairedInferenceConfig {
+                minimum_sample_ratio: ratio,
+                ..PairedInferenceConfig::default()
+            };
+            assert!(
+                matches!(
+                    paired_infer(&[], config),
+                    Err(ComparisonError::InvalidSampleRatio)
+                ),
+                "ratio {ratio} must be rejected"
+            );
+        }
+        for margin in [-1.0, f64::NAN] {
+            let config = PairedInferenceConfig {
+                equivalence_margin_percent: margin,
+                ..PairedInferenceConfig::default()
+            };
+            assert!(
+                matches!(
+                    paired_infer(&[], config),
+                    Err(ComparisonError::InvalidEquivalenceMargin)
+                ),
+                "margin {margin} must be rejected"
+            );
+        }
+        let config = PairedInferenceConfig {
+            equivalence_margin_percent: 0.0,
+            ..PairedInferenceConfig::default()
+        };
+        assert!(paired_infer(&[], config).is_ok());
+        let config = PairedInferenceConfig {
+            minimum_sample_ratio: 1.0,
+            ..PairedInferenceConfig::default()
+        };
+        assert!(paired_infer(&[], config).is_ok());
+    }
+
+    #[test]
+    fn paired_improvement_reports_exact_median() -> Result<(), Box<dyn std::error::Error>> {
+        let result = paired_infer(
+            &[paired_run(0, 20.0, 10.0)],
+            PairedInferenceConfig::default(),
+        )?;
+        assert_eq!(result.median_relative_improvement_percent, 50.0);
+        assert_eq!(result.improvement_wins, 1);
+        assert_eq!(result.practical_ties, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn equivalence_margin_boundary_counts_ties() -> Result<(), Box<dyn std::error::Error>> {
+        let config = PairedInferenceConfig {
+            equivalence_margin_percent: 25.0,
+            ..PairedInferenceConfig::default()
+        };
+        let result = paired_infer(&[paired_run(0, 100.0, 75.0)], config)?;
+        assert_eq!(result.practical_ties, 1);
+        assert_eq!(result.improvement_wins, 0);
+        assert_eq!(result.regression_losses, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn negative_margin_boundary_counts_ties() -> Result<(), Box<dyn std::error::Error>> {
+        let config = PairedInferenceConfig {
+            equivalence_margin_percent: 25.0,
+            ..PairedInferenceConfig::default()
+        };
+        let result = paired_infer(&[paired_run(0, 100.0, 125.0)], config)?;
+        assert_eq!(result.practical_ties, 1);
+        assert_eq!(result.improvement_wins, 0);
+        assert_eq!(result.regression_losses, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn even_pair_count_uses_averaged_median() -> Result<(), Box<dyn std::error::Error>> {
+        let config = PairedInferenceConfig {
+            minimum_pairs: 2,
+            alpha: 0.5,
+            ..PairedInferenceConfig::default()
+        };
+        let result = paired_infer(&[paired_run(0, 8.0, 7.0), paired_run(1, 8.0, 5.0)], config)?;
+        assert_eq!(result.median_relative_improvement_percent, 25.0);
+        assert_eq!(result.outcome, PairedInferenceOutcome::Improved);
+        Ok(())
+    }
+
+    #[test]
+    fn weak_direction_without_significance_stays_inconclusive()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut pairs = vec![paired_run(0, 100.0, 75.0)];
+        for id in 1..6 {
+            pairs.push(paired_run(id, 100.0, 125.0));
+        }
+        let result = paired_infer(&pairs, PairedInferenceConfig::default())?;
+        assert_eq!(result.improvement_wins, 1);
+        assert_eq!(result.regression_losses, 5);
+        assert_eq!(result.outcome, PairedInferenceOutcome::Inconclusive);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_invalid_comparison_config() {
+        let baseline = stats(1_000, 16.0, 62.5);
+        let candidate = stats(1_000, 16.0, 62.5);
+        let input = ComparisonInput {
+            baseline: &baseline,
+            candidate: &candidate,
+            baseline_stutter_count: 0,
+            candidate_stutter_count: 0,
+            same_scenario: true,
+        };
+        for ratio in [0.0, f64::NAN, 2.0] {
+            let config = ComparisonConfig {
+                minimum_sample_ratio: ratio,
+                ..ComparisonConfig::default()
+            };
+            assert!(
+                matches!(
+                    compare(input, config),
+                    Err(ComparisonError::InvalidSampleRatio)
+                ),
+                "ratio {ratio} must be rejected"
+            );
+        }
+        for threshold in [-1.0, f64::NAN] {
+            let config = ComparisonConfig {
+                change_threshold_percent: threshold,
+                ..ComparisonConfig::default()
+            };
+            assert!(
+                matches!(
+                    compare(input, config),
+                    Err(ComparisonError::InvalidChangeThreshold)
+                ),
+                "threshold {threshold} must be rejected"
+            );
+        }
+        assert!(
+            compare(
+                input,
+                ComparisonConfig {
+                    change_threshold_percent: 0.0,
+                    ..ComparisonConfig::default()
+                }
+            )
+            .is_ok()
+        );
+        assert!(
+            compare(
+                input,
+                ComparisonConfig {
+                    minimum_sample_ratio: 1.0,
+                    ..ComparisonConfig::default()
+                }
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn boundary_sample_ratio_stays_comparable() -> Result<(), Box<dyn std::error::Error>> {
+        let baseline = stats(1_000, 16.0, 62.5);
+        let candidate = stats(800, 16.0, 62.5);
+        let result = compare(
+            ComparisonInput {
+                baseline: &baseline,
+                candidate: &candidate,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            ComparisonConfig::default(),
+        )?;
+        assert_eq!(result.comparability, Comparability::Comparable);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_single_empty_comparison_run() {
+        let empty = stats(0, 16.0, 62.5);
+        let full = stats(1_000, 16.0, 62.5);
+        let result = compare(
+            ComparisonInput {
+                baseline: &empty,
+                candidate: &full,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            ComparisonConfig::default(),
+        );
+        assert!(matches!(result, Err(ComparisonError::EmptyComparison)));
+    }
+
+    #[test]
+    fn rejects_nonpositive_low_fps_metrics() {
+        let valid = LowFpsMetrics {
+            percentile_1_low_fps: 60.0,
+            percentile_0_1_low_fps: 55.0,
+            mean_fps_of_worst_1pct_frames: 58.0,
+            mean_fps_of_worst_0_1pct_frames: 54.0,
+        };
+        for invalid in [f64::NAN, 0.0, -3.0] {
+            let baseline = LowFpsMetrics {
+                percentile_1_low_fps: invalid,
+                ..valid
+            };
+            assert!(
+                matches!(
+                    compare_low_fps(&baseline, &valid, ComparisonConfig::default()),
+                    Err(ComparisonError::InvalidComparisonMetric(_))
+                ),
+                "metric {invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_positive_low_fps_metrics() -> Result<(), Box<dyn std::error::Error>> {
+        let valid = LowFpsMetrics {
+            percentile_1_low_fps: 60.0,
+            percentile_0_1_low_fps: 55.0,
+            mean_fps_of_worst_1pct_frames: 58.0,
+            mean_fps_of_worst_0_1pct_frames: 54.0,
+        };
+        let (first, second) = compare_low_fps(&valid, &valid, ComparisonConfig::default())?;
+        assert_eq!(first.direction, DeltaDirection::Unchanged);
+        assert_eq!(second.direction, DeltaDirection::Unchanged);
+        Ok(())
+    }
+
+    #[test]
+    fn metric_delta_pins_threshold_boundary_and_direction() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let threshold_config = ComparisonConfig {
+            change_threshold_percent: 12.5,
+            ..ComparisonConfig::default()
+        };
+        let baseline = stats(1_000, 8.0, 62.5);
+        let candidate = stats(1_000, 9.0, 62.5);
+        let result = compare(
+            ComparisonInput {
+                baseline: &baseline,
+                candidate: &candidate,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            threshold_config,
+        )?;
+        assert_eq!(
+            result.metrics.mean_frame_time_ms.direction,
+            DeltaDirection::Regressed
+        );
+
+        let candidate = stats(1_000, 8.5, 62.5);
+        let result = compare(
+            ComparisonInput {
+                baseline: &baseline,
+                candidate: &candidate,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            threshold_config,
+        )?;
+        assert_eq!(
+            result.metrics.mean_frame_time_ms.direction,
+            DeltaDirection::Unchanged
+        );
+
+        let slow_fps = stats(1_000, 16.0, 30.0);
+        let fast_fps = stats(1_000, 16.0, 60.0);
+        let result = compare(
+            ComparisonInput {
+                baseline: &fast_fps,
+                candidate: &slow_fps,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            ComparisonConfig::default(),
+        )?;
+        assert_eq!(
+            result.metrics.average_fps.direction,
+            DeltaDirection::Regressed
+        );
+
+        let zero_config = ComparisonConfig {
+            change_threshold_percent: 0.0,
+            ..ComparisonConfig::default()
+        };
+        let same_a = stats(1_000, 16.0, 60.0);
+        let same_b = stats(1_000, 16.0, 60.0);
+        let result = compare(
+            ComparisonInput {
+                baseline: &same_a,
+                candidate: &same_b,
+                baseline_stutter_count: 0,
+                candidate_stutter_count: 0,
+                same_scenario: true,
+            },
+            zero_config,
+        )?;
+        assert_eq!(
+            result.metrics.average_fps.direction,
+            DeltaDirection::Regressed
+        );
+        assert_eq!(
+            result.metrics.mean_frame_time_ms.direction,
+            DeltaDirection::Regressed
+        );
         Ok(())
     }
 }

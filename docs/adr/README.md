@@ -9,13 +9,14 @@ Accepted and reconstructed decisions currently relevant to implementation:
 - ADR-0005: QPC canonical timebase
 - ADR-0006: nearest-rank statistics
 - ADR-0007: JSON schema and benchmark identity
-- ADR-0008: heuristic evidence score semantics
+- ADR-0008: live-session metrics
 - ADR-0009: run-level A/B inference and equivalence margins
-- ADR-0010: Tauri 2 GUI technology
-- ADR-0011: local-first privacy and default redaction
-- ADR-0012: observer-effect budget
-- ADR-0013: observation/event/diagnosis/identity separation
+- ADR-0010: native GUI technology
+- ADR-0011: performance classification
+- ADR-0012: deterministic report serialization
+- ADR-0013: release artifact provenance
 - ADR-0014: live-session orchestration and shared QPC timebase
+- ADR-0015: PresentMon graceful cancellation and fallback
 - ADR-0016: PresentMon version matrix
 - ADR-0017: refresh-aware stutter rule v2
 - ADR-0018: active-display refresh-rate source
@@ -27,6 +28,10 @@ Accepted and reconstructed decisions currently relevant to implementation:
 - ADR-0024: GUI session history and provenance manifest
 - ADR-0025: opt-out for process and thread telemetry probing
 - ADR-0026: background-interference alignment contradiction
+- ADR-0027: sampler overhead single-device baseline and cadence lock
+- ADR-0028: PresentMon distribution and verification
+- ADR-0029: WebView2 runtime install mode
+- ADR-0030: no automatic updates
 
 ADR-0001..0008 and ADR-0011..0013 are reconstructed from the project ledger and implementation contracts; reconstruction status is explicit in each record.
 

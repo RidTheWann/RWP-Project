@@ -139,6 +139,74 @@ fn enumerate_background_processes(
     Ok((activity, current))
 }
 
+/// Redacted live-process identity for UI target selection: PID plus the
+/// executable name only. No CPU, memory, or path detail leaves this boundary,
+///
+/// keeping the picker to the same data the background sampler already observes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSummary {
+    /// Live process identifier.
+    pub process_id: u32,
+    /// Executable basename reported by the snapshot, lossily decoded.
+    pub name: String,
+}
+
+/// Lists currently present processes in PID order for UI target selection.
+///
+/// Only identity is returned; utilization stays inside the sampler. Entries
+/// whose names cannot be decoded are skipped rather than fabricated.
+pub fn list_processes() -> Result<Vec<ProcessSummary>, crate::windows::SystemTelemetryError> {
+    // SAFETY: Windows allocates an owned process snapshot handle; no pointers are passed from Rust memory.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot.is_null() || snapshot == INVALID_HANDLE_VALUE {
+        return Err(crate::windows::SystemTelemetryError::ProcessSnapshot);
+    }
+    let mut entry = PROCESSENTRY32 {
+        dwSize: std::mem::size_of::<PROCESSENTRY32>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: snapshot is a valid process snapshot and entry is initialized with its required size.
+    let first = unsafe { Process32First(snapshot, &mut entry) };
+    if first == 0 {
+        // SAFETY: snapshot was returned by CreateToolhelp32Snapshot and remains owned here.
+        let _ = unsafe { CloseHandle(snapshot) };
+        return Err(crate::windows::SystemTelemetryError::ProcessEnumeration);
+    }
+    let mut processes = Vec::new();
+    loop {
+        let pid = entry.th32ProcessID;
+        if pid != 0
+            && let Some(name) = executable_name(&entry.szExeFile)
+        {
+            processes.push(ProcessSummary {
+                process_id: pid,
+                name,
+            });
+        }
+        // SAFETY: snapshot is a valid process snapshot and entry remains valid for enumeration.
+        let next = unsafe { Process32Next(snapshot, &mut entry) };
+        if next == 0 {
+            break;
+        }
+    }
+    // SAFETY: snapshot was returned by CreateToolhelp32Snapshot and remains owned here.
+    let _ = unsafe { CloseHandle(snapshot) };
+    processes.sort_by_key(|entry| entry.process_id);
+    Ok(processes)
+}
+
+fn executable_name(raw: &[i8; 260]) -> Option<String> {
+    let bytes: Vec<u8> = raw
+        .iter()
+        .take_while(|value| **value != 0)
+        .map(|value| *value as u8)
+        .collect();
+    if bytes.is_empty() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 fn read_process_times(process_id: u32) -> Option<ProcessCpuTimes> {
     // SAFETY: the process ID comes from ToolHelp enumeration and no Rust pointer is passed to OpenProcess.
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id) };
@@ -163,7 +231,7 @@ fn read_process_times(process_id: u32) -> Option<ProcessCpuTimes> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ActivityIdAllocator, ProcessCpuTimes, process_utilization};
+    use super::{ActivityIdAllocator, ProcessCpuTimes, list_processes, process_utilization};
 
     #[test]
     fn computes_eighty_percent_process_utilization() {
@@ -190,5 +258,23 @@ mod tests {
         let third = allocator.id_for(43);
         assert_eq!(first, second);
         assert!(third > second);
+    }
+
+    /// Live-system shape check: the picker lists present processes with
+    /// positive PIDs, non-empty names, in PID order.
+    #[test]
+    #[cfg(windows)]
+    fn process_list_is_sorted_with_usable_identities()
+    -> Result<(), crate::windows::SystemTelemetryError> {
+        let processes = list_processes()?;
+        assert!(!processes.is_empty());
+        assert!(processes.iter().all(|entry| entry.process_id > 0));
+        assert!(processes.iter().all(|entry| !entry.name.is_empty()));
+        assert!(
+            processes
+                .windows(2)
+                .all(|pair| pair[0].process_id < pair[1].process_id)
+        );
+        Ok(())
     }
 }

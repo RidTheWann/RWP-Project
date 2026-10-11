@@ -178,6 +178,90 @@ impl Drop for PresentMonJob {
     }
 }
 
+/// Authenticode verification outcome for one executable file.
+///
+/// Infallible by design: every Win32 failure maps to `VerifyFailed` with the
+/// raw status code, so advisory callers never need a new error variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthenticodeStatus {
+    /// The file carries a trusted signature.
+    Signed,
+    /// The file carries no signature.
+    NotSigned,
+    /// Verification itself failed; holds the raw WinVerifyTrust status.
+    VerifyFailed {
+        /// Raw status code returned by WinVerifyTrust.
+        code: i32,
+    },
+}
+
+/// WinVerifyTrust statuses meaning "no trusted signature present": no
+/// signature at all, or a subject the trust provider does not trust.
+/// Tamper-evidence codes (bad digest, revoked, expired) intentionally stay in
+/// `VerifyFailed` so unsigned and suspicious inputs never share a bucket.
+const TRUST_E_NOSIGNATURE: i32 = 0x800B0100u32 as i32;
+const TRUST_E_SUBJECT_NOT_TRUSTED: i32 = 0x800B0003u32 as i32;
+
+/// Verifies the Authenticode signature of one executable file.
+///
+/// Revocation checks are disabled so the call stays offline-first; a trusted
+/// chain against the local machine stores is sufficient for the v1.0 advisory
+/// use (doctor preflight and provenance notes, never a capture gate).
+pub fn verify_presentmon_authenticode(path: &std::path::Path) -> AuthenticodeStatus {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Security::WinTrust::{
+        WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_FILE_INFO, WTD_CHOICE_FILE,
+        WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY, WTD_UI_NONE,
+        WinVerifyTrustEx,
+    };
+
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut file = WINTRUST_FILE_INFO {
+        cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+        pcwszFilePath: wide.as_ptr(),
+        hFile: std::ptr::null_mut(),
+        pgKnownSubject: std::ptr::null_mut(),
+    };
+    let mut data = WINTRUST_DATA {
+        cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+        dwUIChoice: WTD_UI_NONE,
+        fdwRevocationChecks: WTD_REVOKE_NONE,
+        dwUnionChoice: WTD_CHOICE_FILE,
+        dwStateAction: WTD_STATEACTION_VERIFY,
+        ..Default::default()
+    };
+    // SAFETY: data is fully assigned before use and Anonymous.pFile is the
+    // documented member for WTD_CHOICE_FILE; file outlives the call.
+    let status = unsafe {
+        data.Anonymous.pFile = &mut file;
+        WinVerifyTrustEx(
+            std::ptr::null_mut(),
+            &WINTRUST_ACTION_GENERIC_VERIFY_V2 as *const _ as *mut _,
+            &mut data,
+        )
+    };
+    data.dwStateAction = WTD_STATEACTION_CLOSE;
+    // SAFETY: same initialized structures; the close action frees verification state.
+    let _ = unsafe {
+        WinVerifyTrustEx(
+            std::ptr::null_mut(),
+            &WINTRUST_ACTION_GENERIC_VERIFY_V2 as *const _ as *mut _,
+            &mut data,
+        )
+    };
+    if status == 0 {
+        AuthenticodeStatus::Signed
+    } else if status == TRUST_E_NOSIGNATURE || status == TRUST_E_SUBJECT_NOT_TRUSTED {
+        AuthenticodeStatus::NotSigned
+    } else {
+        AuthenticodeStatus::VerifyFailed { code: status }
+    }
+}
+
 /// Requests a CTRL+BREAK signal for a process group created with CREATE_NEW_PROCESS_GROUP.
 pub fn request_process_group_break(process_group_id: u32) -> Result<(), SystemTelemetryError> {
     // SAFETY: The API is called with a process-group identifier obtained from Child::id().
@@ -1076,8 +1160,8 @@ impl WindowsSystemSampler {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpuTimes, PresentMonVersion, SAMPLER_STATS_WINDOW, SamplerStats, cpu_utilization,
-        normalize_display_refresh_rate,
+        CpuTimes, PresentMonJob, PresentMonVersion, SAMPLER_STATS_WINDOW, SamplerStats,
+        cpu_utilization, normalize_display_refresh_rate,
     };
 
     #[test]
@@ -1206,5 +1290,71 @@ mod tests {
         };
         assert_eq!(cpu_utilization(times, times)?, 0.0);
         Ok(())
+    }
+
+    #[test]
+    fn authenticode_accepts_signed_system_binary() {
+        assert_eq!(
+            super::verify_presentmon_authenticode(std::path::Path::new(
+                r"C:\Windows\System32\kernel32.dll"
+            )),
+            super::AuthenticodeStatus::Signed
+        );
+    }
+
+    #[test]
+    fn authenticode_reports_unsigned_and_missing_files() -> Result<(), Box<dyn std::error::Error>> {
+        let path = std::env::temp_dir().join(format!(
+            "rwp-authenticode-unsigned-{}.bin",
+            std::process::id()
+        ));
+        std::fs::write(&path, [0x4Du8, 0x5A, 0x00, 0x01])?;
+        assert_eq!(
+            super::verify_presentmon_authenticode(&path),
+            super::AuthenticodeStatus::NotSigned
+        );
+        std::fs::remove_file(&path)?;
+        assert!(matches!(
+            super::verify_presentmon_authenticode(&path),
+            super::AuthenticodeStatus::VerifyFailed { .. }
+        ));
+        Ok(())
+    }
+
+    /// Live runtime proof that the kill-on-close Job Object terminates its
+    /// child when the last job handle closes. Uses a benign `timeout` sleeper
+    /// so no PresentMon binary is required; runs unprivileged.
+    #[test]
+    fn job_object_kill_on_close_terminates_child() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::windows::process::CommandExt;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut child = Command::new("cmd")
+            .args(["/C", "timeout", "/t", "30", "/nobreak"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()?;
+        assert!(
+            child.try_wait()?.is_none(),
+            "sleeper child must be alive before the job closes"
+        );
+
+        let job = PresentMonJob::assign_process(&child)?;
+        drop(job);
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if child.try_wait()?.is_some() {
+                return Ok(());
+            }
+            if Instant::now() > deadline {
+                return Err("child survived job close past the 10 s deadline".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 }

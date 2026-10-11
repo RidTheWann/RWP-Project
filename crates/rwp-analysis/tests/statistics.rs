@@ -54,3 +54,13 @@ fn worst_fraction_uses_at_least_one_frame() -> Result<(), Box<dyn std::error::Er
     assert_eq!(stats.low_fps.mean_fps_of_worst_0_1pct_frames, 1000.0 / 30.0);
     Ok(())
 }
+
+#[test]
+fn worst_fraction_averages_multiple_frames() -> Result<(), Box<dyn std::error::Error>> {
+    let mut values = vec![10.0; 198];
+    values.push(100.0);
+    values.push(100.0);
+    let stats = compute_statistics(&values, StatisticsConfig::default())?;
+    assert_eq!(stats.low_fps.mean_fps_of_worst_1pct_frames, 10.0);
+    Ok(())
+}

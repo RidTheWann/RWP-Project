@@ -3,35 +3,39 @@
 > Taruh file ini di repo sebagai `docs/autopilot/MASTER_PLAN.md`. Ini adalah sumber kebenaran rencana.
 > Status pekerjaan ada di `docs/autopilot/STATE.md` (template di §6). Jangan campur keduanya.
 
-## 0. Repository topology and execution policy
+## 0. Execution policy (local-first, no branches, no CI)
 
-The repository has exactly two canonical branches and no others may be created for project work:
+There is one working tree and no other topology:
 
-- `development` is the only working branch. All implementation, fixes, tests, documentation, audits, and release preparation happen on `development`.
-- `main` is the release branch. Only audited, CI-green `development` is promoted to `main`; local builds/tests are optional and are not a promotion prerequisite.
-- Never create `feature/*`, `fix/*`, `task/*`, `autopilot/*`, `docs/*`, or any other temporary/work branch.
-- Do not develop directly on `main`.
-- If a change needs another work stream, keep it as a separate batch/commit on `development`; do not create another branch.
-- CI is audit-first: deep-audit the complete change on `development` before intentionally triggering CI. Local builds/tests are optional; CI owns configured formatting, lint, test, schema, dependency, platform, and release gates.
-- Pull-request validation targets `main` and is valid only for `development` -> `main`. Release artifacts are produced from `main`.
+- All implementation, fixes, tests, documentation, audits, and release
+  preparation happen directly in the tree. Never create branches of any kind.
+- There is no promotion flow, no merge-back, no freeze, no trailers, and no
+  skip markers. CI is retired (`.github/` removed with the remote); the
+  per-batch local gate on the pinned 1.99.0 toolchain is the verification
+  (`docs/local-gates.md`).
+- Every batch follows: work (tests first) → full local gate → owner audit →
+  record in `docs/autopilot/STATE.md` (+ CHANGELOG only for user-facing
+  changes). No verification claim without pasted command output.
+- The `.git` directory on disk is dormant: never used, never read, never
+  removed without an explicit owner order.
 
 ## 1. Definisi "siap release & matang" (Release Criteria)
 
-v1.0.0 hanya boleh di-tag jika SEMUA kriteria ini terpenuhi dan tercatat di STATE.md dengan bukti (link CI / log / file).
+v1.0.0 hanya dicatat (CHANGELOG + provenance) jika SEMUA kriteria ini terpenuhi dan tercatat di STATE.md dengan bukti (output gate / log / file).
 
 | ID | Kriteria | Target awal (boleh disesuaikan lewat ADR) |
 |---|---|---|
 | RC-01 | Semua temuan AUD berprioritas P0 dan P1 tertutup, masing-masing dengan tes regresi | 100% |
-| RC-02 | `Cargo.lock` ter-commit; semua job CI memakai `--locked`; build Windows + Linux (crate netral) hijau | hijau |
+| RC-02 | `Cargo.lock` present; semua perintah gate memakai `--locked`; build Windows + Linux (crate netral) hijau | hijau |
 | RC-03 | Coverage baris crate inti; mutation score crate analisis | ≥85% line (analysis, diagnostics, report, parser capture); ≥70% mutation (analysis, diagnostics) |
 | RC-04 | Tiap rule diagnosis punya tes: fire, no-fire, kontradiksi, data kurang; rule_id berversi; threshold terdokumentasi beserta dasar pemilihannya | semua rule |
 | RC-05 | Overhead sampler terukur dan terdokumentasi | rata-rata ≤1% CPU total, p99 durasi satu sampel ≤2 ms pada interval default (mesin referensi dicatat) |
 | RC-06 | Alur end-to-end capture → analyze → compare → report berjalan di CLI dan GUI dengan data nyata; hasil disimpan dengan manifest + hash | ya |
 | RC-07 | Validasi pengukuran dengan data nyata | ≥6 capture nyata (≥2 vendor GPU bila tersedia) + hasil kalibrasi A/A |
 | RC-08 | Input tidak tepercaya (CSV PresentMon, capture/report JSON, path dari webview) aman: batas ukuran, fuzz/proptest, threat model | ya |
-| RC-09 | Installer NSIS dibangun di CI, diuji install/upgrade/uninstall, ber-SHA256 + SBOM + provenance; ditandatangani (atau batasan SmartScreen didokumentasikan secara eksplisit) | ya |
+| RC-09 | Installer NSIS dibangun lokal, diuji install/upgrade/uninstall, ber-SHA256 + SBOM + provenance; ditandatangani (atau batasan SmartScreen didokumentasikan secara eksplisit) | ya |
 | RC-10 | Tidak ada koneksi jaringan keluar pada operasi normal (diverifikasi, bukan diasumsikan) | ya |
-| RC-11 | Dokumentasi lengkap dan konsisten, diperiksa otomatis di CI | ya |
+| RC-11 | Dokumentasi lengkap dan konsisten, diperiksa otomatis lokal | ya |
 | RC-12 | Matriks akseptansi di hardware nyata lulus dan tercatat di `docs/acceptance/` | ya |
 
 ## 2. Baseline dan temuan audit (AUD)
@@ -72,16 +76,16 @@ Aturan umum semua WP:
 - Setiap keputusan desain non-trivial → ADR singkat di `docs/adr/` (konteks, opsi, keputusan, konsekuensi).
 - Tiap WP diakhiri: CHANGELOG diperbarui, STATE.md diperbarui, perintah verifikasi lokal dicantumkan.
 
-### WP0 — Fondasi reproducibility dan CI (AUD-19, AUD-20)
-1. `Cargo.lock`: BLOCKED_ON_USER (pengguna menjalankan `cargo generate-lockfile && git add Cargo.lock`, atau mengambil artifact `generated-cargo-lock` dari CI). Setelah itu hapus langkah `generate-lockfile` dari CI dan jadikan semua perintah `--locked`.
-2. Pecah CI: job `windows-latest` (penuh) + job `ubuntu-latest` untuk crate platform-netral (`rwp-core`, `-analysis`, `-diagnostics`, `-report`, `-capture`, `-ui`, `-cli`): fmt, clippy `-D warnings`, test. Tambah job `cargo build --release --locked`.
-3. Job NSIS: build bundle Tauri (versi `tauri-cli` di-pin), unggah installer + `SHA256SUMS` sebagai artifact.
-4. Pin GitHub Actions ke commit SHA; tambah konfigurasi Dependabot (cargo + github-actions).
+### WP0 — Fondasi reproducibility dan gate lokal (AUD-19, AUD-20)
+1. `Cargo.lock`: present in the source tree and validated with `--locked` on every gated command (historical note: the lockfile was committed during WP0; the tautological lockfile-generation CI step is long retired with CI itself).
+2. Gate lokal berurutan: `fmt --all -- --check`, `clippy --workspace --all-targets --all-features --locked -- -D warnings`, `test --workspace --all-features --locked`, `cargo deny check`, `cargo audit`, `validate_schemas.py`, `check_docs.py` + unit checker, di toolchain pin 1.99.0. Perintah persisnya di `docs/local-gates.md`.
+3. Job NSIS: build bundle Tauri lokal (versi `tauri-cli` tercatat), installer + `SHA256SUMS` sebagai artefak lokal yang dihash ke provenance (biner tak dikomit).
+4. Dependabot/rules/actions (dulu pin SHA): pensiun bersama CI; penggantinya adalah pin toolchain + `--locked` + kebijakan lisensi `deny.toml`/`about.toml` yang ditegakkan lokal.
 5. Lint: aktifkan `clippy::undocumented_unsafe_blocks` (deny) dan tulis `// SAFETY:` di setiap blok `unsafe` di `rwp-system`.
 6. Sinkronkan dokumen: satu sumber status (ledger), README hanya menaut. Rekonstruksi ADR-0001..0014 yang hilang berdasarkan ledger dan kode (tandai "reconstructed"). Hapus section ganda. Buat `docs/schema/v1/` (lihat WP4).
-7. Skrip cek dokumen di CI: setiap ADR di indeks ada file-nya; milestone README = CHANGELOG terbaru; tautan relatif tidak patah.
+7. Skrip cek dokumen lokal: setiap ADR di indeks ada file-nya; milestone README = CHANGELOG terbaru; tautan relatif tidak patah (`tools/check_docs.py`, `tools/check_links.py`).
 
-DoD: CI hijau di dua OS; `--locked` bermakna; installer artifact terbentuk; cek dokumen lulus.
+DoD: gate lokal hijau penuh; `--locked` bermakna; installer artifact terbentuk; cek dokumen lulus.
 
 ### WP1 — Perbaikan correctness (AUD-01..07), test-first
 - AUD-01: ganti helper jadi `supporting()` / `contradicting()`; tes: semua item di `contradicting_evidence` berpolaritas `Contradicting`; snapshot serialisasi.
@@ -136,42 +140,44 @@ DoD: tes validasi path; target fuzz/proptest untuk parser; threat model ditinjau
 1. Coverage (`cargo-llvm-cov`) dengan gate per crate sesuai RC-03; mutation testing (`cargo-mutants`) pada analysis, diagnostics, report; bunuh mutan yang selamat atau catat alasannya.
 2. Property test: persentil vs implementasi referensi naif; invarian stutter (event terurut, tak tumpang tindih, merge gap dihormati); serde round-trip; determinisme (dua run → byte identik).
 3. Benchmark Criterion analyzer untuk 1 juta frame dengan anggaran regresi; benchmark overhead sampler.
-4. Fuzz (`cargo-fuzz`, job Linux terjadwal) untuk parser CSV dan pembaca JSON.
-5. Aplikasi uji sintetis `tools/rwp-testapp` yang mem-present dengan kadensi dan hitch terkontrol untuk harness akseptansi (VERIFY kelayakan di runner Windows CI tanpa GPU; fallback: manual).
+4. Fuzz (`cargo-fuzz`, pin 0.13.2, nightly) untuk parser CSV dan pembaca JSON: korpus seed ter-commit; eksekusi libFuzzer berjalan di Linux (deferred dari Windows lokal — lihat STATE Fase 2); smoke-test mutasi deterministik berjalan di gate stabil.
+5. Aplikasi uji sintetis `tools/rwp-testapp` yang mem-present dengan kadensi dan hitch terkontrol untuk harness akseptansi (VERIFY kelayakan di mesin owner; fallback: manual).
 6. Golden dari capture nyata (BLOCKED_ON_USER, bagian dari WP2).
 
 DoD: RC-03 dan RC-04 terpenuhi.
 
 ### WP7 — Rekayasa rilis (RC-09, RC-10)
-1. Kebijakan SemVer; CHANGELOG format Keep a Changelog; workflow rilis pada tag `v*`: build, test, NSIS, `SHA256SUMS`, SBOM (`cargo-cyclonedx`), `THIRD_PARTY_LICENSES` (`cargo-about`), attestation provenance build, draft GitHub Release dari CHANGELOG.
+1. Kebijakan SemVer; CHANGELOG format Keep a Changelog; proses rilis lokal: build, test, NSIS, `SHA256SUMS`, SBOM (`cargo-cyclonedx`), `THIRD_PARTY_LICENSES` (`cargo-about`), attestation provenance build, draft catatan rilis dari CHANGELOG. Tanpa tag git, tanpa GitHub Release.
 2. Penandatanganan Authenticode untuk exe + installer: BLOCKED_ON_USER (sertifikat atau layanan signing untuk OSS). Sebelum tersedia, dokumentasikan peringatan SmartScreen.
 3. ADR `webviewInstallMode` (bootstrapper vs offline installer WebView2) mengingat posisi offline-first.
-4. Tes installer di CI: silent install/uninstall, upgrade dari versi sebelumnya, lokasi data pengguna dipertahankan/dihapus sesuai pilihan.
+4. Tes installer lokal: silent install/uninstall, upgrade dari versi sebelumnya, lokasi data pengguna dipertahankan/dihapus sesuai pilihan.
 5. ADR distribusi PresentMon: (a) disuplai pengguna (sekarang), (b) unduhan terpandu dengan SHA-256 pin, (c) dibundel (verifikasi lisensi dan atribusi dulu). Keputusan: pemilik.
 6. ADR auto-update: default OFF; bila ada harus opt-in dan bertanda tangan.
 7. Migrasi skema: `rwp migrate` untuk laporan/sesi lama.
-8. Bukti RC-10: tes/skrip yang memeriksa tidak ada crate HTTP client di dependensi engine dan pengamatan lalu lintas jaringan saat sesi normal (dicatat di `docs/acceptance/`).
+8. Bukti RC-10: pemindaian dependensi engine (nol HTTP-client di graf target) dan run terpantau yang tercatat, bukan asumsi (dicatat di STATE dan `docs/acceptance/`).
 
-DoD: tag dry-run menghasilkan draft release lengkap; installer lulus tes.
+DoD: artefak rilis lokal lengkap; installer lulus tes.
 
 ### WP8 — Dokumentasi dan UX akhir (RC-11)
-README ditulis ulang dengan contoh hasil ukur nyata (berlabel jelas), instalasi, quickstart GUI dan CLI, ringkasan metodologi, keterbatasan, privasi. Dokumen: `docs/methodology.md` (definisi statistik, detektor, rule, threshold, hasil validasi), `docs/limitations.md` (frame generation, multi-GPU, anti-cheat, apa yang tidak bisa disimpulkan), `docs/troubleshooting.md`, `docs/privacy.md`. Tambah CODE_OF_CONDUCT, template issue/PR, perbarui SECURITY (kanal pelaporan). Referensi CLI dihasilkan dari `clap`. Aksesibilitas GUI dasar (keyboard, kontras, label). Cek tautan di CI.
+README ditulis ulang dengan contoh hasil ukur nyata (berlabel jelas), instalasi, quickstart GUI dan CLI, ringkasan metodologi, keterbatasan, privasi. Dokumen: `docs/methodology.md` (definisi statistik, detektor, rule, threshold, hasil validasi), `docs/limitations.md` (frame generation, multi-GPU, anti-cheat, apa yang tidak bisa disimpulkan), `docs/troubleshooting.md`, `docs/privacy.md`. Tambah CODE_OF_CONDUCT, template issue/PR, perbarui SECURITY (kanal pelaporan). Referensi CLI dihasilkan dari `clap`. Aksesibilitas GUI dasar (keyboard, kontras, label). Cek tautan via `tools/check_links.py` lokal.
 
 ### WP9 — Release candidate dan v1.0 (RC-12)
 Freeze fitur; RC1; matriks akseptansi di hardware nyata (BLOCKED_ON_USER), dicatat di `docs/acceptance/<tanggal>.md`:
 - ≥2 mesin (idealnya NVIDIA + non-NVIDIA), ≥3 judul/API (DX11, DX12, Vulkan).
 - Skenario: baseline; beban CPU latar sengaja (harus memunculkan BackgroundInterference/CPU-bound dengan benar, dan tidak memunculkannya saat tanpa beban); stres GPU (GPU-bound); cancel di tengah run; PresentMon tanpa izin; game ditutup di tengah run; run 30 menit (memori stabil); jaringan diputus (tidak ada koneksi keluar); kalibrasi A/A.
-Daftar known issues; checklist go/no-go; tag `v1.0.0` hanya bila RC-01..RC-12 terpenuhi.
+Daftar known issues; checklist go/no-go; catat `v1.0.0` di CHANGELOG + provenance hanya bila RC-01..RC-12 terpenuhi (tanpa tag git).
 
-## 4. Gate umum (berlaku di setiap batch)
+## 4. Gate umum (otoritas: `docs/local-gates.md`, berlaku di setiap batch)
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
 - `cargo test --workspace --all-features --locked`
 - `cargo deny check` dan `cargo audit`
+- `python tools/validate_schemas.py`, `python tools/check_docs.py` + unit checker, `python tools/check_links.py`
 - Tes baru untuk setiap perubahan perilaku; tidak ada tes yang dilemahkan agar lulus.
+- Tanpa klaim lolos tanpa output perintah yang ditempel di STATE.
 
 ## 5. Perkiraan daftar BLOCKED_ON_USER
-`Cargo.lock` commit · fixture CSV PresentMon nyata · hasil harness akurasi CPU per-thread · hasil benchmark overhead di mesin referensi · sertifikat code signing · keputusan ADR (distribusi PresentMon, WebView2, auto-update, default `--no-process-probing`) · akseptansi hardware (WP9).
+`Cargo.lock` present · fixture CSV PresentMon nyata · hasil harness akurasi CPU per-thread · hasil benchmark overhead di mesin referensi · sertifikat code signing · keputusan ADR (distribusi PresentMon, WebView2, auto-update, default `--no-process-probing`) · akseptansi hardware (WP9).
 Kumpulkan semuanya dalam satu daftar, beri rekomendasi default, dan teruskan WP lain yang tidak terblokir.
 
 ## 6. Template `docs/autopilot/STATE.md`
@@ -180,7 +186,7 @@ Kumpulkan semuanya dalam satu daftar, beri rekomendasi default, dan teruskan WP 
 ---
 plan_version: 1
 last_updated: <ISO-8601>
-repo_ref: <git sha atau nama zip>
+repo_ref: not used (no-git policy; trail lives in Log + reports)
 active_wp: WP0
 ---
 ## Status WP
@@ -189,15 +195,15 @@ active_wp: WP0
 | WP0 | TODO | |
 
 ## Status AUD
-| AUD | status (OPEN/FIXED/STALE/WONTFIX) | bukti (tes/commit/CI) |
+| AUD | status (OPEN/FIXED/STALE/WONTFIX) | bukti (tes/laporan/STATE) |
 |---|---|---|
 
 ## Status RC
 | RC | status | bukti |
 |---|---|---|
 
-## Log (terbaru di atas; simpan 20 entri, ringkas yang lebih lama)
-- <tanggal> <WP>/<AUD>: <apa yang dikerjakan>; verifikasi: VERIFIED(<bukti>) | UNVERIFIED
+## Log (terbaru di atas)
+- <tanggal> <WP>/<AUD>: <apa yang dikerjakan>; output gate ditempel
 
 ## Keputusan terbuka
 - <pertanyaan> — rekomendasi default: <...>
@@ -208,15 +214,11 @@ active_wp: WP0
 ## NEXT
 <satu kalimat: langkah berikutnya yang konkret>
 ```
-## Autopilot execution rule — audit-first, CI-backed
+## Autopilot execution rule — audit-first, local gates
 
-- All project work happens directly on `development`; `main` is release-only. Never create task branches.
-- Before intentionally triggering CI, deep-audit the complete current diff against this plan, applicable AUD findings, product invariants, affected call sites, tests, schemas, documentation, and workflow behavior.
-- Local builds/tests are optional developer tools. Do not require local Rust compilation, formatting, lint, tests, schema validation, or a `Local-Verification: PASS` trailer as a prerequisite to triggering CI.
-- Until the deep audit is complete, state/documentation commits must include `[skip ci]`. The first commit intentionally allowed to trigger CI must carry `Deep-Audit: PASS`, added only after an actual audit.
-- CI is responsible for the configured pinned-toolchain format, Clippy, test, locked build, dependency, schema, documentation, and Windows installer gates. Do not weaken gates to get a green run.
-- After a CI failure, inspect the exact failing job logs, re-audit the root cause, and fix it on `development`. Keep intermediate correction commits on `[skip ci]`; after the complete correction batch has been audited, trigger CI with a fresh `Deep-Audit: PASS`.
-- Use `workflow_dispatch` only for explicitly authorized final validation/release work, not as a shortcut around the audit gate.
-- No commit on `main` may be used to bypass these rules. Promote only the audited, CI-green `development` lineage.
-
-GitHub skip markers are intended only for pre-audit/intermediate development commits. Do not put a skip marker on the commit intended to trigger CI.
+- All project work happens directly in the single working tree. Never create branches, and never use git for verification (no log/status/diff/commit/tag reads).
+- Every batch runs: work (tests first) → full local gate in order → owner audit → record in STATE (+ CHANGELOG only for user-facing changes).
+- Local Rust verification is the gate, not an option: pinned 1.99.0 toolchain, formatting, lint, tests, schema, docs, dependency, and installer checks per `docs/local-gates.md`.
+- After a gate failure, inspect the exact failing output, fix the root cause, and re-run the full gate; never weaken tests or lint gates. Record the failure and the fix in STATE.
+- No claim without pasted command output. The `.git` directory stays dormant.
+- Threat-model sign-off and release decisions belong to the owner; never sign unilaterally.

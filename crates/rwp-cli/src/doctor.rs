@@ -70,6 +70,9 @@ pub struct DoctorPresentMon {
     pub supported_version: Option<bool>,
     /// Whether the current Windows token satisfies the capture permission preflight.
     pub permissions_ok: Option<bool>,
+    /// Authenticode signature status (`signed`/`unsigned`/`verify-failed`),
+    /// when evaluated. Advisory only: v1.0 keeps user-supplied executables.
+    pub signature_status: Option<&'static str>,
 }
 
 /// Runs deterministic local preflight diagnostics.
@@ -156,6 +159,7 @@ fn check_presentmon(path: &Path, checks: &mut Vec<DoctorCheck>) -> DoctorPresent
                 major_version: None,
                 supported_version: None,
                 permissions_ok: presentmon_permissions(checks),
+                signature_status: None,
             };
         }
     };
@@ -173,12 +177,14 @@ fn check_presentmon(path: &Path, checks: &mut Vec<DoctorCheck>) -> DoctorPresent
     };
 
     let (major_version, supported_version) = presentmon_version(&canonical, checks);
+    let signature_status = presentmon_signature(&canonical, checks);
     DoctorPresentMon {
         executable_valid: true,
         size_bytes,
         major_version,
         supported_version,
         permissions_ok: presentmon_permissions(checks),
+        signature_status,
     }
 }
 
@@ -249,6 +255,53 @@ fn presentmon_version(_path: &Path, checks: &mut Vec<DoctorCheck>) -> (Option<u1
         ),
     });
     (None, None)
+}
+
+/// Reports the Authenticode signature status of a validated PresentMon path.
+///
+/// Advisory only: an unsigned executable keeps `ok` unset (never failing the
+/// preflight) because v1.0 keeps user-supplied executables; only a failed
+/// verification itself is a failure. Returns the bundle-facing status string.
+#[cfg(windows)]
+fn presentmon_signature(path: &Path, checks: &mut Vec<DoctorCheck>) -> Option<&'static str> {
+    match rwp_system::verify_presentmon_authenticode(path) {
+        rwp_system::AuthenticodeStatus::Signed => {
+            checks.push(DoctorCheck {
+                id: "presentmon.signature",
+                ok: Some(true),
+                detail: String::from("Authenticode signature verified"),
+            });
+            Some("signed")
+        }
+        rwp_system::AuthenticodeStatus::NotSigned => {
+            checks.push(DoctorCheck {
+                id: "presentmon.signature",
+                ok: None,
+                detail: String::from(
+                    "unsigned executable accepted for v1.0 user-supplied capture; signature enforcement deferred",
+                ),
+            });
+            Some("unsigned")
+        }
+        rwp_system::AuthenticodeStatus::VerifyFailed { code } => {
+            checks.push(DoctorCheck {
+                id: "presentmon.signature",
+                ok: Some(false),
+                detail: format!("signature verification failed with status code {code}"),
+            });
+            Some("verify-failed")
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn presentmon_signature(_path: &Path, checks: &mut Vec<DoctorCheck>) -> Option<&'static str> {
+    checks.push(DoctorCheck {
+        id: "presentmon.signature",
+        ok: None,
+        detail: String::from("Windows Authenticode verification is unavailable on this platform"),
+    });
+    None
 }
 
 fn redact_presentmon_config_error(error: &PresentMonConfigError) -> String {
@@ -345,6 +398,33 @@ mod tests {
         assert!(fs::read_to_string(&path)?.contains("rwp.doctor.v1"));
         assert!(write_bundle(&path, &report).is_err());
         fs::remove_file(path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn unsigned_presentmon_is_advisory_not_failure() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = std::env::temp_dir().join(format!("rwp-doctor-sig-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir)?;
+        let path = dir.join("PresentMon.exe");
+        fs::write(&path, b"synthetic unsigned executable")?;
+
+        let report = run(Some(&path));
+        let presentmon = report.presentmon.ok_or("presentmon section missing")?;
+        assert!(presentmon.executable_valid);
+        let signature = report
+            .checks
+            .iter()
+            .find(|check| check.id == "presentmon.signature")
+            .ok_or("signature check missing")?;
+        if cfg!(windows) {
+            assert_eq!(signature.ok, None);
+            assert_eq!(presentmon.signature_status, Some("unsigned"));
+        } else {
+            assert_eq!(signature.ok, None);
+            assert_eq!(presentmon.signature_status, None);
+        }
+        fs::remove_dir_all(dir)?;
         Ok(())
     }
 }

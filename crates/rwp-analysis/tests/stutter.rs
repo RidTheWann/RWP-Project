@@ -168,6 +168,298 @@ fn rejects_non_monotonic_timestamps() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[test]
+fn invalid_stutter_configs_are_rejected() {
+    let invalid = [
+        StutterConfig {
+            rolling_half_window_frames: 0,
+            ..StutterConfig::default()
+        },
+        StutterConfig {
+            multiplier: 0.0,
+            ..StutterConfig::default()
+        },
+        StutterConfig {
+            multiplier: f64::NAN,
+            ..StutterConfig::default()
+        },
+        StutterConfig {
+            absolute_threshold_ms: 0.0,
+            ..StutterConfig::default()
+        },
+        StutterConfig {
+            minimum_baseline_samples: 0,
+            ..StutterConfig::default()
+        },
+        StutterConfig {
+            merge_gap_ms: -1.0,
+            ..StutterConfig::default()
+        },
+    ];
+    for config in invalid {
+        assert!(detect_stutters(&[], config).is_err());
+    }
+    let zero_gap = detect_stutters(
+        &[],
+        StutterConfig {
+            merge_gap_ms: 0.0,
+            ..StutterConfig::default()
+        },
+    );
+    assert!(zero_gap.is_ok());
+}
+
+#[test]
+fn invalid_refresh_aware_configs_are_rejected() {
+    let base = RefreshAwareStutterConfig {
+        rolling_half_window_frames: 2,
+        multiplier: 2.0,
+        refresh_rate_hz: 60.0,
+        minimum_baseline_samples: 1,
+        merge_gap_ms: 50.0,
+    };
+    let invalid = [
+        RefreshAwareStutterConfig {
+            refresh_rate_hz: 0.0,
+            ..base
+        },
+        RefreshAwareStutterConfig {
+            refresh_rate_hz: f64::NAN,
+            ..base
+        },
+        RefreshAwareStutterConfig {
+            multiplier: 0.0,
+            ..base
+        },
+        RefreshAwareStutterConfig {
+            merge_gap_ms: -1.0,
+            ..base
+        },
+    ];
+    for config in invalid {
+        assert!(detect_stutters_refresh_aware(&[], config).is_err());
+    }
+    let zero_gap = detect_stutters_refresh_aware(
+        &[],
+        RefreshAwareStutterConfig {
+            merge_gap_ms: 0.0,
+            ..base
+        },
+    );
+    assert!(zero_gap.is_ok());
+}
+
+fn spike_trace(
+    spike_index: u64,
+    spike_ms: f64,
+) -> Result<Vec<FrameSample>, Box<dyn std::error::Error>> {
+    (0..7_u64)
+        .map(|index| {
+            frame(
+                index * 8_000_000,
+                if index == spike_index { spike_ms } else { 10.0 },
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn exact_neighbor_minimum_is_sufficient() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 50.0)?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 30.0,
+            minimum_baseline_samples: 4,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert_eq!(events.len(), 1);
+
+    let events = detect_stutters_refresh_aware(
+        &frames,
+        RefreshAwareStutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            refresh_rate_hz: 60.0,
+            minimum_baseline_samples: 4,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert_eq!(events.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn interior_spike_below_combined_threshold_is_ignored() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 15.0)?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 5.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn single_true_conjunct_does_not_fire() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 25.0)?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 30.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn multiplier_boundary_equality_does_not_fire() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 20.0)?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 5.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn absolute_boundary_equality_does_not_fire() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 30.0)?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 30.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn truncated_window_median_uses_available_neighbors() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = (0..7_u64)
+        .map(|index| {
+            let value = match index {
+                0 => 20.0,
+                2 => 50.0,
+                3 => 60.0,
+                _ => 10.0,
+            };
+            frame(index * 8_000_000, value)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 3,
+            multiplier: 0.5,
+            absolute_threshold_ms: 5.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.iter().all(|event| event.start_timestamp_ns != 0));
+    Ok(())
+}
+
+#[test]
+fn edge_spike_uses_truncated_window() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = (0..5_u64)
+        .map(|index| frame(index * 8_000_000, if index == 0 { 50.0 } else { 10.0 }))
+        .collect::<Result<Vec<_>, _>>()?;
+    let events = detect_stutters(
+        &frames,
+        StutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 2.0,
+            absolute_threshold_ms: 5.0,
+            minimum_baseline_samples: 2,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert_eq!(events.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn refresh_aware_spike_below_period_aware_threshold_is_ignored()
+-> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 20.0)?;
+    let events = detect_stutters_refresh_aware(
+        &frames,
+        RefreshAwareStutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 1.5,
+            refresh_rate_hz: 60.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn refresh_aware_multiplier_dominated_threshold_holds() -> Result<(), Box<dyn std::error::Error>> {
+    let frames = spike_trace(3, 28.0)?;
+    let events = detect_stutters_refresh_aware(
+        &frames,
+        RefreshAwareStutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 3.0,
+            refresh_rate_hz: 60.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn refresh_aware_exact_threshold_equality_does_not_fire() -> Result<(), Box<dyn std::error::Error>>
+{
+    let spike_ms = 10.0 + 1_000.0 / 60.0;
+    let frames = spike_trace(3, spike_ms)?;
+    let events = detect_stutters_refresh_aware(
+        &frames,
+        RefreshAwareStutterConfig {
+            rolling_half_window_frames: 2,
+            multiplier: 1.5,
+            refresh_rate_hz: 60.0,
+            minimum_baseline_samples: 1,
+            merge_gap_ms: 50.0,
+        },
+    )?;
+    assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
 fn accepts_equal_timestamps_as_non_decreasing() -> Result<(), Box<dyn std::error::Error>> {
     let frames = vec![frame(10, 8.0)?, frame(10, 40.0)?];
     let result = detect_stutters(

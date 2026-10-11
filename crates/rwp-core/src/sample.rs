@@ -276,4 +276,40 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn optional_frame_telemetry_rejects_nonfinite_values() -> Result<(), CoreError> {
+        let frame = FrameSample::new(1, 8.0)?;
+        assert_eq!(
+            frame
+                .with_telemetry(None, Some(f64::INFINITY), None, None, None, None)
+                .err(),
+            Some(CoreError::NonFinite {
+                field: "cpu_wait_ms"
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn constructors_reject_negative_and_nonfinite_input() {
+        assert_eq!(
+            FrameSample::new(0, -2.0).err(),
+            Some(CoreError::NonPositive {
+                field: "frame_time_ms"
+            })
+        );
+        assert_eq!(
+            ProcessThreadSample::new(1, f64::NAN).err(),
+            Some(CoreError::NonFinite {
+                field: "cpu_utilization"
+            })
+        );
+        assert_eq!(
+            BackgroundActivity::new(1, f64::INFINITY).err(),
+            Some(CoreError::NonFinite {
+                field: "cpu_utilization"
+            })
+        );
+    }
 }

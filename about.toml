@@ -1,0 +1,16 @@
+# License policy for `cargo-about` license reporting. Mirrors the allow list in
+# `deny.toml` (confidence threshold 0.8 there applies to cargo-deny), plus the
+# SPDX LLVM exception used by `target-lexicon` (reporting only; the deny
+# enforcement list is unchanged).
+accepted = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]

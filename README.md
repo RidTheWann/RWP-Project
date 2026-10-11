@@ -4,11 +4,15 @@
 
 RidTheWann Performance (rwp) is an evidence-based gaming and streaming performance analyzer for Windows 11. It correlates frame timing with system state, detects reproducible failure patterns, and explains evidence without treating a heuristic score as probability.
 
-> Illustrative report — not a live measurement.
+> Measured example — single device, labeled (Windows 11 Build 26200 x64,
+> Ryzen 5 5600G, 16 GiB, non-admin, release profile, 50 ms cadence, ~211
+> target threads, 12,000 ticks):
 >
-> Evidence score: 82/100 (heuristic evidence score, not probability).
+> Sampler mean 18.855 ms/tick, rolling p99 28.352 ms/tick; system-only mode
+> 0.016 ms mean. Probe-process CPU 23.75% of one core.
 >
-> These numbers are illustrative only. They do not claim a live measurement, causal proof, or a tuning recommendation.
+> This describes one box, not hardware in general. Method and validation
+> basis: `docs/methodology.md`. What RWP cannot claim: `docs/limitations.md`.
 
 ## Product boundary
 
@@ -18,26 +22,40 @@ Measure -> Analyze -> Diagnose -> Compare -> Explain -> Recommend -> Optimize
 
 The engine is deterministic and offline-first. Capture is out-of-process. There is no DLL injection, game hook, overlay dependency, account, or background telemetry requirement.
 
+## Quickstart — CLI
+
+```powershell
+rwp doctor --presentmon C:\Tools\PresentMon.exe
+rwp import-presentmon capture.csv --process-id 42 --qpc-frequency-hz 10000000 --output-dir sessions/run
+rwp analyze --session sessions/run --output-dir sessions/run-analyzed
+rwp report --session sessions/run-analyzed --format md
+rwp compare --baseline sessions/a --candidate sessions/b --same-scenario
+rwp migrate --session sessions/legacy --output-dir sessions/migrated
+```
+
+Legacy reports or sessions go through `rwp migrate` (see `docs/troubleshooting.md`).
+Full command reference: `docs/cli-reference.md`. Error codes: `docs/cli-errors.md`.
+
+## Quickstart — GUI
+
+Build and run the native app, pick the PresentMon executable (Browse), choose
+a live target process from the picker (or type its PID), set duration and
+interval, and Start capture. Progress, history, two-session Compare, and
+failure remediation are built in; captures that need real hardware or
+PresentMon permissions are documented in `docs/acceptance/gui.md`.
+
 ## Project status
 
 The authoritative milestone, release-gate, audit, and verification status is maintained in docs/project-ledger.md and the active autopilot state in docs/autopilot/STATE.md. The release plan is docs/autopilot/MASTER_PLAN.md.
 
-## CLI
-
-    rwp analyze --input capture.json --pretty
-    rwp analyze --input capture.json --output report.json
-    rwp compare --baseline baseline.json --candidate candidate.json --same-scenario --pretty
-
-Without --same-scenario, the result is explicitly marked inconclusive for A/B interpretation.
-
 ## Engineering constraints
 
 - No DLL injection, hooks, or in-process overlay.
-- No telemetry sent anywhere by default.
+- No network access in normal operation (RC-10 evidence recorded).
 - Missing measurements are represented as absence, never fabricated zeroes.
 - Diagnostic evidence scores are not probabilities.
 - Unknown is a first-class result.
-- Locked CI gates are mandatory: fmt, Clippy, tests, cargo-deny, cargo-audit, release build, and NSIS packaging.
+- Local verification gates are mandatory: fmt, Clippy, tests, cargo-deny, cargo-audit, schema and docs checks (see `docs/local-gates.md`).
 
 ## License
 

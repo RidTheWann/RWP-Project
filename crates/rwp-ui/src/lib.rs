@@ -330,4 +330,85 @@ mod tests {
             ["Overview", "Stutters", "Diagnostics", "Compare",]
         );
     }
+
+    #[test]
+    fn ui_state_cycles_through_every_tab() {
+        let mut state = UiState::default();
+        for tab in DashboardTab::all() {
+            state.select(tab);
+            assert_eq!(state.active_tab(), tab);
+        }
+    }
+
+    #[test]
+    fn model_converts_stutter_events_to_rows() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = (0..20_u64)
+            .map(|index| {
+                rwp_core::FrameSample::new(index * 8_000_000, if index == 10 { 40.0 } else { 8.0 })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let capture = CaptureDocument {
+            schema_version: "rwp.capture.v1".to_owned(),
+            frames,
+        };
+        let report = build_report(
+            &capture,
+            StatisticsConfig {
+                p999_reliability_threshold: 1,
+            },
+            StutterConfig::default(),
+        )?;
+        let model = build_dashboard_model(&report, &[], None);
+        assert_eq!(model.stutters.len(), 1);
+        let row = &model.stutters[0];
+        assert_eq!(row.start_ms, 80.0);
+        assert_eq!(row.duration_ms, 0.0);
+        assert_eq!(row.peak_frame_time_ms, 40.0);
+        assert_eq!(row.baseline_frame_time_ms, 8.0);
+        assert_eq!(row.candidate_frame_count, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn model_maps_diagnostic_evidence_to_cards() -> Result<(), Box<dyn std::error::Error>> {
+        use rwp_core::{EvidenceItem, EvidencePolarity};
+        let report = report()?;
+        let diagnostics = vec![Diagnostic::new(
+            DiagnosticCategory::CpuBound,
+            "cpu_bound.v1".to_owned(),
+            70,
+            vec![EvidenceItem {
+                evidence_id: String::from("cpu.frame_share"),
+                polarity: EvidencePolarity::Supporting,
+                statement: String::from("high CPU share"),
+                weight: 35,
+            }],
+            vec![EvidenceItem {
+                evidence_id: String::from("gpu.strong_share"),
+                polarity: EvidencePolarity::Contradicting,
+                statement: String::from("high GPU share"),
+                weight: 40,
+            }],
+            Vec::new(),
+            report.frame_count,
+            60,
+        )?];
+        let model = build_dashboard_model(&report, &diagnostics, None);
+        assert_eq!(model.diagnostics.len(), 1);
+        let card = &model.diagnostics[0];
+        assert_eq!(card.category, "CPU bound");
+        assert_eq!(card.rule_id, "cpu_bound.v1");
+        assert_eq!(card.evidence_score, 70);
+        assert_eq!(
+            card.supporting_evidence,
+            vec!["cpu.frame_share: high CPU share"]
+        );
+        assert_eq!(
+            card.contradicting_evidence,
+            vec!["gpu.strong_share: high GPU share"]
+        );
+        assert_eq!(model.metrics.len(), 4);
+        assert!(model.comparison.is_none());
+        Ok(())
+    }
 }

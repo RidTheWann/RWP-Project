@@ -470,6 +470,55 @@ mod tests {
         }
     }
 
+    const REPORT_SEED_JSON: &str =
+        include_str!("../../../fuzz/corpus/report_json/report.v2.golden.json");
+
+    fn mutate_seed_text(seed: &str, cases: usize, mut apply: impl FnMut(&str)) {
+        let mut state = 0xD1B5_4A32_7E13_5F19_u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 56) as u8
+        };
+        let seed_bytes = seed.as_bytes();
+        for _ in 0..cases {
+            let mut input = seed_bytes.to_vec();
+            let operations = usize::from(next() % 4);
+            for _ in 0..=operations {
+                let index = usize::from(next()) % (input.len() + 1);
+                match next() % 3 {
+                    0 => {
+                        if index < input.len() {
+                            input[index] ^= next() | 1;
+                        }
+                    }
+                    1 => {
+                        if index < input.len() {
+                            input.remove(index);
+                        }
+                    }
+                    _ => {
+                        if input.len() < 4096 {
+                            input.insert(index.min(input.len()), next());
+                        }
+                    }
+                }
+            }
+            if let Ok(text) = std::str::from_utf8(&input) {
+                apply(text);
+            }
+        }
+    }
+
+    #[test]
+    fn seeded_report_mutations_do_not_panic() {
+        assert!(from_json(REPORT_SEED_JSON).is_ok());
+        mutate_seed_text(REPORT_SEED_JSON, 256, |text| {
+            let _ = from_json(text);
+        });
+    }
+
     #[test]
     fn report_json_rejects_excessive_nesting() -> Result<(), Box<dyn std::error::Error>> {
         let input = format!("{}0{}", "[".repeat(65), "]".repeat(65));

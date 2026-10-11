@@ -39,10 +39,17 @@
           <label>
             <span>PresentMon executable</span>
             <input id="presentmon-executable" type="text" placeholder="C:\Tools\PresentMon.exe" autocomplete="off" />
+            <button class="ghost" id="browse-presentmon" type="button">Browse</button>
           </label>
           <label>
             <span>Output CSV</span>
             <input id="output-file" type="text" placeholder="C:\Captures\session.csv" autocomplete="off" />
+            <button class="ghost" id="browse-output" type="button">Browse</button>
+          </label>
+          <label>
+            <span>Target process</span>
+            <select id="process-select"><option value="">Select a live process</option></select>
+            <button class="ghost" id="refresh-processes" type="button">Refresh</button>
           </label>
           <label>
             <span>Target PID</span>
@@ -71,6 +78,11 @@
           <button class="secondary" id="stop-session" disabled>Stop</button>
           <button class="ghost" id="reset-session">Reset</button>
         </div>
+
+        <div id="capture-progress" style="display:none;margin-top:12px;background:#222;border-radius:4px;height:8px;">
+          <div id="capture-progress-fill" style="height:100%;width:0%;background:#4caf50;border-radius:4px;"></div>
+        </div>
+        <p class="capture-note" id="session-remediation" style="display:none;"></p>
 
         <p class="capture-note" id="runtime-note">
           PresentMon runs out-of-process. The session backend shares one QPC timebase
@@ -149,6 +161,7 @@
             <span class="muted" id="stutter-count">No capture loaded</span>
           </div>
           <div class="table-wrap">
+            <canvas id="stutter-chart" width="640" height="160" style="width:100%;height:auto;"></canvas>
             <table>
               <thead>
                 <tr>

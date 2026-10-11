@@ -62,11 +62,14 @@ The native desktop application writes best-effort JSONL logs beneath `%LOCALAPPD
 
 ## Residual risks
 
-- PresentMon binary authenticity is currently constrained by filename/path/version checks; Authenticode or SHA-256 pinning remains a release-hardening decision.
-- Windows Job Object lifecycle behavior requires real Windows runtime verification.
+- PresentMon binary authenticity is currently constrained by filename/path/version checks plus SHA-256 recording and an advisory offline Authenticode report (`doctor`); signature enforcement remains a signing-phase decision (see ADR-0028).
+- Windows Job Object kill-on-close behavior is verified by a local runtime test (unprivileged); lifecycle of an attached live PresentMon child still needs live-capture confirmation.
 - Fuzz/property gates and Windows runtime verification of resource-boundary behavior remain outstanding.
 - Hardware acceptance and real PresentMon fixture validation remain external acceptance work.
+- P2: migrated sessions carry no provenance marker, so a migrated session is indistinguishable from a natively verified one. Options: stamp migration provenance and document it, or verify-first when the source hashes are intact. Tracked as follow-up, not a release blocker.
 
 ## Review status
 
 Drafted during WP5 audit on 2026-10-09. Owner review is required before RC freeze.
+
+Sign-off: PENDING — owner decision required. (Not signed unilaterally; this line changes only on explicit owner approval.)

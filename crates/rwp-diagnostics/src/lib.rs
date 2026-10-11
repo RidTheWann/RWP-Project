@@ -1963,3 +1963,619 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod mutation_baseline_tests {
+    use super::{
+        DiagnosisInput, DiagnosticEngine, RuleThresholds, category_rank,
+        has_high_telemetry_overlap, max_f64, mean_gpu_utilization, mean_peak_thread_utilization,
+        median_positive_timestamp_delta, threshold_parameters, validate_thresholds,
+    };
+    use rwp_analysis::{StatisticsConfig, compute_statistics};
+    use rwp_core::{
+        BackgroundActivity, DiagnosticCategory, FrameSample, ProcessThreadSample, StutterEvent,
+        SystemSample,
+    };
+
+    fn plain_frames(
+        count: usize,
+        frame_time_ms: f64,
+    ) -> Result<Vec<FrameSample>, rwp_core::CoreError> {
+        (0..count)
+            .map(|index| FrameSample::new(index as u64 * 10_000_000, frame_time_ms))
+            .collect()
+    }
+
+    fn statistics_for(
+        frames: &[FrameSample],
+    ) -> Result<rwp_analysis::FrameStatistics, rwp_analysis::StatisticsError> {
+        let frame_times = frames
+            .iter()
+            .map(|frame| frame.frame_time_ms)
+            .collect::<Vec<_>>();
+        compute_statistics(
+            &frame_times,
+            StatisticsConfig {
+                p999_reliability_threshold: 1,
+            },
+        )
+    }
+
+    fn system_at(timestamp_ns: u64) -> SystemSample {
+        SystemSample::new(timestamp_ns)
+    }
+
+    #[test]
+    fn category_ranks_follow_stable_order() {
+        let expected = [
+            (DiagnosticCategory::CpuBound, 0),
+            (DiagnosticCategory::GpuBound, 1),
+            (DiagnosticCategory::FramePacing, 2),
+            (DiagnosticCategory::Thermal, 3),
+            (DiagnosticCategory::MemoryPressure, 4),
+            (DiagnosticCategory::VramPressure, 5),
+            (DiagnosticCategory::BackgroundInterference, 6),
+            (DiagnosticCategory::StreamingOverhead, 7),
+            (DiagnosticCategory::Unknown, 8),
+        ];
+        for (category, rank) in expected {
+            assert_eq!(category_rank(category), rank);
+        }
+    }
+
+    #[test]
+    fn threshold_parameters_reports_every_field() {
+        let parameters = threshold_parameters(RuleThresholds::default());
+        assert_eq!(parameters.len(), 16);
+        let value = |name: &str| {
+            parameters
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, parameter)| parameter.clone())
+        };
+        assert_eq!(value("activation_score"), Some(String::from("60")));
+        assert_eq!(value("cpu_frame_share"), Some(0.8_f64.to_string()));
+        assert_eq!(
+            value("background_min_aligned_fraction"),
+            Some(0.5_f64.to_string())
+        );
+        assert_eq!(value("frame_pacing_ratio"), Some(1.75_f64.to_string()));
+        assert_eq!(value("minimum_frame_samples"), Some(60_usize.to_string()));
+    }
+
+    #[test]
+    fn engine_reports_configured_thresholds() {
+        let thresholds = RuleThresholds {
+            activation_score: 7,
+            ..RuleThresholds::default()
+        };
+        let engine = DiagnosticEngine::new(thresholds);
+        assert_eq!(engine.thresholds(), thresholds);
+    }
+
+    #[test]
+    fn telemetry_overlap_detects_samples_inside_stutter_windows() {
+        let stutters = vec![StutterEvent {
+            start_timestamp_ns: 100,
+            end_timestamp_ns: 200,
+            peak_frame_time_ms: 40.0,
+            baseline_frame_time_ms: 10.0,
+            candidate_frame_count: 1,
+            detector_parameters: Vec::new(),
+        }];
+        let overlapping = {
+            let mut sample = system_at(150);
+            sample.gpu_utilization = Some(95.0);
+            sample
+        };
+        let on_start_edge = {
+            let mut sample = system_at(100);
+            sample.gpu_utilization = Some(90.0);
+            sample
+        };
+        let outside = {
+            let mut sample = system_at(500);
+            sample.gpu_utilization = Some(95.0);
+            sample
+        };
+        let below_threshold = {
+            let mut sample = system_at(150);
+            sample.gpu_utilization = Some(10.0);
+            sample
+        };
+        let getter = |sample: &SystemSample| sample.gpu_utilization;
+        assert!(has_high_telemetry_overlap(
+            &stutters,
+            &[overlapping],
+            getter,
+            90.0
+        ));
+        assert!(has_high_telemetry_overlap(
+            &stutters,
+            &[on_start_edge],
+            getter,
+            90.0
+        ));
+        assert!(!has_high_telemetry_overlap(
+            &stutters,
+            &[outside],
+            getter,
+            90.0
+        ));
+        assert!(!has_high_telemetry_overlap(
+            &stutters,
+            &[below_threshold],
+            getter,
+            90.0
+        ));
+        assert!(!has_high_telemetry_overlap(&stutters, &[], getter, 90.0));
+    }
+
+    #[test]
+    fn median_timestamp_delta_uses_sorted_middle() {
+        let samples = [0, 10, 30, 60, 100]
+            .into_iter()
+            .map(system_at)
+            .collect::<Vec<_>>();
+        assert_eq!(median_positive_timestamp_delta(&samples), Some(30));
+        assert_eq!(median_positive_timestamp_delta(&[system_at(0)]), None);
+        assert_eq!(median_positive_timestamp_delta(&[]), None);
+        assert_eq!(
+            median_positive_timestamp_delta(&[system_at(42), system_at(42)]),
+            None
+        );
+    }
+
+    #[test]
+    fn max_f64_prefers_present_maximum() {
+        assert_eq!(max_f64(None, Some(3.0)), Some(3.0));
+        assert_eq!(max_f64(Some(2.0), None), Some(2.0));
+        assert_eq!(max_f64(Some(2.0), Some(5.0)), Some(5.0));
+        assert_eq!(max_f64(None, None), None);
+    }
+
+    #[test]
+    fn mean_utilization_helpers_average_present_values() -> Result<(), Box<dyn std::error::Error>> {
+        let mut first = system_at(0);
+        first.process_threads = vec![
+            ProcessThreadSample::new(1, 10.0)?,
+            ProcessThreadSample::new(2, 90.0)?,
+        ];
+        let mut second = system_at(100_000_000);
+        second.process_threads = vec![ProcessThreadSample::new(1, 50.0)?];
+        assert_eq!(mean_peak_thread_utilization(&[first, second]), Some(70.0));
+        assert_eq!(mean_peak_thread_utilization(&[]), None);
+
+        let mut low = system_at(0);
+        low.gpu_utilization = Some(10.0);
+        let mut high = system_at(100_000_000);
+        high.gpu_utilization = Some(30.0);
+        assert_eq!(mean_gpu_utilization(&[low, high]), Some(20.0));
+        assert_eq!(mean_gpu_utilization(&[system_at(0)]), None);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_threshold_fields_are_rejected() {
+        let cases: Vec<(RuleThresholds, &str)> = vec![
+            (
+                RuleThresholds {
+                    minimum_frame_samples: 0,
+                    ..RuleThresholds::default()
+                },
+                "minimum_frame_samples",
+            ),
+            (
+                RuleThresholds {
+                    minimum_system_samples: 0,
+                    ..RuleThresholds::default()
+                },
+                "minimum_system_samples",
+            ),
+            (
+                RuleThresholds {
+                    cpu_frame_share: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "cpu_frame_share",
+            ),
+            (
+                RuleThresholds {
+                    cpu_frame_share: 2.0,
+                    ..RuleThresholds::default()
+                },
+                "cpu_frame_share",
+            ),
+            (
+                RuleThresholds {
+                    gpu_frame_share: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "gpu_frame_share",
+            ),
+            (
+                RuleThresholds {
+                    thread_utilization: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "thread_utilization",
+            ),
+            (
+                RuleThresholds {
+                    gpu_utilization: 200.0,
+                    ..RuleThresholds::default()
+                },
+                "gpu_utilization",
+            ),
+            (
+                RuleThresholds {
+                    gpu_temperature_c: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "gpu_temperature_c",
+            ),
+            (
+                RuleThresholds {
+                    gpu_clock_drop_percent: f64::NAN,
+                    ..RuleThresholds::default()
+                },
+                "gpu_clock_drop_percent",
+            ),
+            (
+                RuleThresholds {
+                    gpu_clock_drop_percent: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "gpu_clock_drop_percent",
+            ),
+            (
+                RuleThresholds {
+                    gpu_clock_drop_percent: 200.0,
+                    ..RuleThresholds::default()
+                },
+                "gpu_clock_drop_percent",
+            ),
+            (
+                RuleThresholds {
+                    background_cpu_utilization: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "background_cpu_utilization",
+            ),
+            (
+                RuleThresholds {
+                    background_min_aligned_fraction: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "background_min_aligned_fraction",
+            ),
+            (
+                RuleThresholds {
+                    ram_utilization: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "ram_utilization",
+            ),
+            (
+                RuleThresholds {
+                    vram_utilization: 101.0,
+                    ..RuleThresholds::default()
+                },
+                "vram_utilization",
+            ),
+            (
+                RuleThresholds {
+                    frame_pacing_ratio: 1.0,
+                    ..RuleThresholds::default()
+                },
+                "frame_pacing_ratio",
+            ),
+            (
+                RuleThresholds {
+                    frame_pacing_min_stutter_events: 0,
+                    ..RuleThresholds::default()
+                },
+                "frame_pacing_min_stutter_events",
+            ),
+            (
+                RuleThresholds {
+                    frame_pacing_min_events_per_minute: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "frame_pacing_min_events_per_minute",
+            ),
+            (
+                RuleThresholds {
+                    activation_score: 0,
+                    ..RuleThresholds::default()
+                },
+                "activation_score",
+            ),
+            (
+                RuleThresholds {
+                    activation_score: 101,
+                    ..RuleThresholds::default()
+                },
+                "activation_score",
+            ),
+        ];
+        for (thresholds, field) in cases {
+            assert_eq!(
+                validate_thresholds(thresholds),
+                Err(super::DiagnosticError::InvalidThreshold(field)),
+                "field {field} must be rejected"
+            );
+        }
+        assert_eq!(validate_thresholds(RuleThresholds::default()), Ok(()));
+        assert_eq!(
+            validate_thresholds(RuleThresholds {
+                activation_score: 100,
+                ..RuleThresholds::default()
+            }),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn frame_pacing_tail_ratio_uses_division() -> Result<(), Box<dyn std::error::Error>> {
+        let mut frames = Vec::new();
+        for index in 0..100_u64 {
+            let time = if index >= 98 { 30.0 } else { 10.0 };
+            frames.push(FrameSample::new(index * 10_000_000, time)?);
+        }
+        let statistics = statistics_for(&frames)?;
+        assert_eq!(statistics.percentiles.p99_ms, 30.0);
+        assert_eq!(statistics.percentiles.p50_ms, 10.0);
+        let engine = DiagnosticEngine::new(RuleThresholds {
+            frame_pacing_ratio: 100.0,
+            activation_score: 1,
+            minimum_frame_samples: 1,
+            minimum_system_samples: 1,
+            ..RuleThresholds::default()
+        });
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &[],
+            system_samples: &[],
+        })?;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].category, DiagnosticCategory::Unknown);
+        Ok(())
+    }
+
+    #[test]
+    fn frame_pacing_rate_requires_both_count_and_rate() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = (0..61_u64)
+            .map(|index| FrameSample::new(index * 10_000_000_000, 10.0))
+            .collect::<Result<Vec<_>, _>>()?;
+        let statistics = statistics_for(&frames)?;
+        let stutters = [100_000_000_000, 300_000_000_000, 500_000_000_000]
+            .into_iter()
+            .map(|timestamp| StutterEvent {
+                start_timestamp_ns: timestamp,
+                end_timestamp_ns: timestamp,
+                peak_frame_time_ms: 40.0,
+                baseline_frame_time_ms: 10.0,
+                candidate_frame_count: 1,
+                detector_parameters: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds {
+            frame_pacing_min_stutter_events: 3,
+            frame_pacing_min_events_per_minute: 6.0,
+            activation_score: 1,
+            minimum_frame_samples: 1,
+            minimum_system_samples: 1,
+            ..RuleThresholds::default()
+        });
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &stutters,
+            system_samples: &[],
+        })?;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].category, DiagnosticCategory::Unknown);
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_fires_at_exact_temperature_threshold() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                sample.gpu_temperature_c = Some(85.0);
+                sample.gpu_clock_mhz = if index < 8 { Some(1800) } else { Some(1400) };
+                sample
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &[],
+            system_samples: &system,
+        })?;
+        assert!(
+            result
+                .iter()
+                .any(|diagnostic| diagnostic.category == DiagnosticCategory::Thermal)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_clock_drop_division_is_not_multiplication() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                sample.gpu_temperature_c = Some(90.0);
+                sample.gpu_clock_mhz = if index < 9 { Some(1800) } else { Some(0) };
+                sample
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &[],
+            system_samples: &system,
+        })?;
+        assert!(
+            result
+                .iter()
+                .any(|diagnostic| diagnostic.category == DiagnosticCategory::Thermal)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn small_clock_drop_stays_below_default_threshold() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                sample.gpu_temperature_c = Some(90.0);
+                sample.gpu_clock_mhz = if index < 9 { Some(1800) } else { Some(1700) };
+                sample
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &[],
+            system_samples: &system,
+        })?;
+        assert!(
+            !result
+                .iter()
+                .any(|diagnostic| diagnostic.category == DiagnosticCategory::Thermal)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_fires_at_exact_clock_drop_threshold() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                sample.gpu_temperature_c = Some(90.0);
+                sample.gpu_clock_mhz = if index < 9 { Some(1000) } else { Some(750) };
+                sample
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds {
+            gpu_clock_drop_percent: 25.0,
+            ..RuleThresholds::default()
+        });
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &[],
+            system_samples: &system,
+        })?;
+        let thermal = result
+            .iter()
+            .find(|diagnostic| diagnostic.category == DiagnosticCategory::Thermal)
+            .ok_or("thermal diagnostic missing at exact clock-drop threshold")?;
+        assert_eq!(thermal.evidence_score, 70);
+        Ok(())
+    }
+
+    #[test]
+    fn zero_aligned_events_omit_burst_evidence() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let quiet_burst = BackgroundActivity::new(1, 1.0)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                if index == 3 {
+                    sample.background_activity = vec![quiet_burst.clone()];
+                }
+                sample
+            })
+            .collect::<Vec<_>>();
+        let stutters = vec![StutterEvent {
+            start_timestamp_ns: 300_000_000,
+            end_timestamp_ns: 300_000_000,
+            peak_frame_time_ms: 40.0,
+            baseline_frame_time_ms: 10.0,
+            candidate_frame_count: 1,
+            detector_parameters: Vec::new(),
+        }];
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &stutters,
+            system_samples: &system,
+        })?;
+        assert!(!result.iter().any(|diagnostic| {
+            diagnostic.category == DiagnosticCategory::BackgroundInterference
+                && diagnostic
+                    .supporting_evidence
+                    .iter()
+                    .any(|item| item.evidence_id == "background.cpu_burst")
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn exact_alignment_fraction_omits_contradiction() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = plain_frames(60, 10.0)?;
+        let statistics = statistics_for(&frames)?;
+        let loud_burst = BackgroundActivity::new(1, 50.0)?;
+        let quiet_burst = BackgroundActivity::new(1, 1.0)?;
+        let system = (0..10_u64)
+            .map(|index| {
+                let mut sample = system_at(index * 100_000_000);
+                if index == 3 {
+                    sample.background_activity = vec![loud_burst.clone()];
+                } else if index == 7 {
+                    sample.background_activity = vec![quiet_burst.clone()];
+                }
+                sample
+            })
+            .collect::<Vec<_>>();
+        let stutters = [300_000_000, 700_000_000]
+            .into_iter()
+            .map(|timestamp| StutterEvent {
+                start_timestamp_ns: timestamp,
+                end_timestamp_ns: timestamp,
+                peak_frame_time_ms: 40.0,
+                baseline_frame_time_ms: 10.0,
+                candidate_frame_count: 1,
+                detector_parameters: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        let result = engine.diagnose(DiagnosisInput {
+            statistics: &statistics,
+            frames: &frames,
+            stutters: &stutters,
+            system_samples: &system,
+        })?;
+        let background = result
+            .iter()
+            .find(|diagnostic| diagnostic.category == DiagnosticCategory::BackgroundInterference)
+            .ok_or("background diagnostic missing at exact alignment fraction")?;
+        assert!(
+            !background
+                .contradicting_evidence
+                .iter()
+                .any(|item| item.evidence_id == "background.low_alignment")
+        );
+        Ok(())
+    }
+}

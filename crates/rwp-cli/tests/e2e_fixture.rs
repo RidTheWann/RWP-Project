@@ -191,6 +191,123 @@ fn fixture_pipeline_import_analyze_compare_report() -> Result<(), Box<dyn std::e
 }
 
 #[test]
+fn migrate_session_and_report_flow() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!("rwp-cli-e2e-migrate-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root)?;
+    let csv = root.join("fixture.csv");
+    let imported = root.join("imported");
+    let migrated = root.join("migrated");
+    fs::write(&csv, FIXTURE)?;
+
+    let import = run_rwp(&[
+        "import-presentmon",
+        csv.to_str().ok_or("invalid csv path")?,
+        "--process-id",
+        "42",
+        "--qpc-frequency-hz",
+        "1000000",
+        "--output-dir",
+        imported.to_str().ok_or("invalid imported path")?,
+    ])?;
+    assert!(import.status.success(), "{import:?}");
+
+    // Downgrade the schema stamps without touching content hashes: current
+    // readers must reject the session, migration must accept it.
+    let manifest_path = imported.join("manifest.json");
+    let manifest_text = fs::read_to_string(&manifest_path)?.replacen(
+        "rwp.session.manifest.v2",
+        "rwp.session.manifest.v1",
+        1,
+    );
+    assert!(manifest_text.contains("rwp.session.manifest.v1"));
+    fs::write(&manifest_path, manifest_text)?;
+    let report_path = imported.join("report.json");
+    let report_text = fs::read_to_string(&report_path)?.replacen(
+        "\"schema_version\":\"rwp.report.v2\"",
+        "\"schema_version\":\"rwp.report.v1\"",
+        1,
+    );
+    assert!(report_text.contains("\"schema_version\":\"rwp.report.v1\""));
+    fs::write(&report_path, report_text.as_bytes())?;
+
+    let rejected = run_rwp(&[
+        "report",
+        "--session",
+        imported.to_str().ok_or("invalid imported path")?,
+        "--format",
+        "json",
+    ])?;
+    assert!(!rejected.status.success(), "{rejected:?}");
+
+    let migrate_session = run_rwp(&[
+        "migrate",
+        "--session",
+        imported.to_str().ok_or("invalid imported path")?,
+        "--output-dir",
+        migrated.to_str().ok_or("invalid migrated path")?,
+    ])?;
+    assert!(migrate_session.status.success(), "{migrate_session:?}");
+
+    let migrated_report = root.join("migrated-report.json");
+    let report = run_rwp(&[
+        "report",
+        "--session",
+        migrated.to_str().ok_or("invalid migrated path")?,
+        "--format",
+        "json",
+        "--output",
+        migrated_report.to_str().ok_or("invalid report path")?,
+    ])?;
+    assert!(report.status.success(), "{report:?}");
+    let report_json: serde_json::Value = serde_json::from_slice(&fs::read(&migrated_report)?)?;
+    assert_eq!(report_json["schema_version"], "rwp.report.v2");
+    let migrated_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(migrated.join("manifest.json"))?)?;
+    assert_eq!(
+        migrated_manifest["schema_version"],
+        "rwp.session.manifest.v2"
+    );
+
+    // Standalone report migration is idempotent on current-schema input.
+    let standalone = root.join("standalone.json");
+    let migrated_standalone = root.join("standalone-migrated.json");
+    fs::write(&standalone, report_text.as_bytes())?;
+    let migrate_report = run_rwp(&[
+        "migrate",
+        "--report",
+        standalone.to_str().ok_or("invalid standalone path")?,
+        "--output",
+        migrated_standalone
+            .to_str()
+            .ok_or("invalid migrated standalone path")?,
+    ])?;
+    assert!(migrate_report.status.success(), "{migrate_report:?}");
+    let standalone_json: serde_json::Value =
+        serde_json::from_slice(&fs::read(&migrated_standalone)?)?;
+    assert_eq!(standalone_json["schema_version"], "rwp.report.v2");
+
+    // Unknown schemas and missing sources fail without writing output.
+    let unknown = root.join("unknown.json");
+    fs::write(&unknown, "{\"schema_version\":\"rwp.report.v9\"}")?;
+    let unknown_out = root.join("unknown-out.json");
+    let unknown_run = run_rwp(&[
+        "migrate",
+        "--report",
+        unknown.to_str().ok_or("invalid unknown path")?,
+        "--output",
+        unknown_out.to_str().ok_or("invalid unknown out path")?,
+    ])?;
+    assert!(!unknown_run.status.success(), "{unknown_run:?}");
+    assert!(!unknown_out.exists());
+    let missing_source = run_rwp(&["migrate"])?;
+    assert!(!missing_source.status.success(), "{missing_source:?}");
+
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
 fn import_refresh_rate_and_analyze_preserve_v2_and_interruption()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::temp_dir().join(format!("rwp-cli-e2e-refresh-{}", std::process::id()));

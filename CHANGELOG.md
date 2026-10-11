@@ -1,8 +1,15 @@
 # Changelog
 
+Versioning follows Semantic Versioning; the version stays `0.1.0` for the
+whole alpha (formal release tagging comes later). Entry format: one bullet per
+user-facing change under `Added`/`Changed`/`Fixed`/`Security`; process-only
+work is recorded in `docs/autopilot/STATE.md`, never here.
+
 ## Unreleased
 
 ### Added
+- Add `rwp migrate` for legacy inputs: `--report` normalizes one standalone `rwp.report` JSON file (v1/v2) to the current report schema, and `--session` rewrites one persisted session with a fresh `rwp.session.manifest.v2` manifest and recomputed hashes while preserving the authored report content and provenance (migration never recomputes diagnostics; use `rwp analyze` for that).
+- Extend the native GUI without hardware: live process picker, native file/save dialogs for PresentMon paths, live capture progress with backend session events, a stutter-peak chart, two-session Compare, and remediation guidance for session failures.
 - Add a pinned `coverage` CI gate (Ubuntu, `cargo-llvm-cov 0.9.1 --locked`): per-crate line coverage must stay at or above 85% for `rwp-analysis`, `rwp-diagnostics`, `rwp-report`, and the `rwp-capture` parser scope (`src/csv.rs`, `src/command.rs`), enforced by `tools/check_coverage.py`.
 - Add a non-gating `mutation.yml` baseline workflow (pinned `cargo-mutants 27.1.0 --locked`, schedule Monday 03:00 UTC + dispatch only): per-package matrix over `rwp-analysis` (337 mutants) and `rwp-diagnostics` (194 mutants), `fail-fast: false`, 360-minute timeout, `mutants.out/` artifacts retained 14 days. Results are recorded as artifacts; the >=70% gate follows only after a stable baseline.
 - Add a non-gating `fuzz-scheduled.yml` workflow (pinned `cargo-fuzz 0.13.2 --locked`, nightly toolchain, schedule Monday 04:00 UTC + dispatch only): a self-contained `fuzz/` cargo-fuzz workspace with four libFuzzer targets (`csv_strict`, `csv_tolerant`, `report_json`, `session_json`), 300 s per target, `continue-on-error`, and crasher artifacts retained 14 days. `fuzz/` is excluded from the stable 1.99 workspace so nightly/libFuzzer dependencies never enter a gate.

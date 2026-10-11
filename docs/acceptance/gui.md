@@ -2,6 +2,13 @@
 
 This checklist is the manual acceptance companion for WP4/WP5. Execute it on a real Windows build using the pinned Rust/toolchain and a real PresentMon v2 capture.
 
+> Fase 4 scope note: items runnable without hardware are covered by automated
+> tests (backend command tests plus CLI E2E): process picker listing, file
+> dialog wiring, live progress/event payloads, Compare on two persisted
+> sessions, and remediation mapping. Items below requiring a real capture,
+> PresentMon permissions, a 30-minute run, or hardware telemetry are explicitly
+> DEFERRED until reference hardware is available — not half-done.
+
 ## Environment
 
 - [ ] Windows 11 test machine recorded.

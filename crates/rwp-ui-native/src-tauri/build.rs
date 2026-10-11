@@ -8,6 +8,10 @@ const APPLICATION_COMMANDS: &[&str] = &[
     "session_history",
     "session_history_load",
     "session_compare",
+    "session_processes",
+    "session_pick_presentmon_file",
+    "session_pick_output_file",
+    "session_error_remediation",
 ];
 
 fn main() {
