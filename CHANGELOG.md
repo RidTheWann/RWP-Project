@@ -1,9 +1,11 @@
 # Changelog
 
 Versioning follows Semantic Versioning; the version stays `0.1.0` for the
-whole alpha (formal release tagging comes later). Entry format: one bullet per
-user-facing change under `Added`/`Changed`/`Fixed`/`Security`; process-only
-work is recorded in `docs/autopilot/STATE.md`, never here.
+whole alpha (first tag `v0.1.0-alpha` published as a GitHub pre-release).
+Entry format: one bullet per user-facing change under
+`Added`/`Changed`/`Fixed`/`Security`; process-only work is recorded in
+`docs/autopilot/STATE.md`, never here (CI-era process entries moved to
+`docs/autopilot/archive/CHANGELOG-ci-era.md`).
 
 ## Unreleased
 
@@ -12,14 +14,8 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 ### Added
 - Add `rwp migrate` for legacy inputs: `--report` normalizes one standalone `rwp.report` JSON file (v1/v2) to the current report schema, and `--session` rewrites one persisted session with a fresh `rwp.session.manifest.v2` manifest and recomputed hashes while preserving the authored report content and provenance (migration never recomputes diagnostics; use `rwp analyze` for that).
 - Extend the native GUI without hardware: live process picker, native file/save dialogs for PresentMon paths, live capture progress with backend session events, a stutter-peak chart, two-session Compare, and remediation guidance for session failures.
-- Add a pinned `coverage` CI gate (Ubuntu, `cargo-llvm-cov 0.9.1 --locked`): per-crate line coverage must stay at or above 85% for `rwp-analysis`, `rwp-diagnostics`, `rwp-report`, and the `rwp-capture` parser scope (`src/csv.rs`, `src/command.rs`), enforced by `tools/check_coverage.py`.
-- Add a non-gating `mutation.yml` baseline workflow (pinned `cargo-mutants 27.1.0 --locked`, schedule Monday 03:00 UTC + dispatch only): per-package matrix over `rwp-analysis` (337 mutants) and `rwp-diagnostics` (194 mutants), `fail-fast: false`, 360-minute timeout, `mutants.out/` artifacts retained 14 days. Results are recorded as artifacts; the >=70% gate follows only after a stable baseline.
-- Add a non-gating `fuzz-scheduled.yml` workflow (pinned `cargo-fuzz 0.13.2 --locked`, nightly toolchain, schedule Monday 04:00 UTC + dispatch only): a self-contained `fuzz/` cargo-fuzz workspace with four libFuzzer targets (`csv_strict`, `csv_tolerant`, `report_json`, `session_json`), 300 s per target, `continue-on-error`, and crasher artifacts retained 14 days. `fuzz/` is excluded from the stable 1.99 workspace so nightly/libFuzzer dependencies never enter a gate.
 - Seed the fuzz corpora from existing fixtures: the minimal PresentMon CSV for `csv_strict`/`csv_tolerant`, and the report/session manifest JSON goldens for `report_json`/`session_json`, so the scheduled runs start from valid grammar instead of an empty corpus.
 - Complete WP6 properties: serde round-trip across all public types (`rwp-core`, `rwp-analysis`, `rwp-report`, `rwp-session`) and two-run byte-identical JSON determinism for `compare`, `paired_infer`, and `SessionManifest`.
-
-### Changed
-- Split CI release packaging out of per-push development runs to cut the ~30 minute cycle: the Windows job now runs only format, Clippy, and tests; `cargo-deny`/`cargo-audit` moved to a parallel Ubuntu job; release build plus Tauri CLI install, NSIS bundling, checksums, and artifact upload run on promotion PRs, `main`, the nightly schedule, and manual dispatch. No gate was removed and no action, pin, or permission changed; batches touching packaging paths must trigger a manual dispatch run before promotion.
 
 ### Fixed
 - Validate persisted session content on load: capture frames must carry positive finite timing with non-decreasing timestamps, and telemetry samples must carry in-range percentages, non-negative power, finite temperature, and ordered timestamps; `SystemSample::new` stays guard-free for programmatic use.
@@ -32,11 +28,9 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 - Give repeated GUI captures unique history folders (`<base>-2`, `<base>-3`, …) instead of failing persistence when the CSV file name is reused, so a finished capture result is never discarded at the end of a long session.
 - Preserve the refresh-aware stutter detector and interruption status in `rwp analyze`: analysis now selects V2 when the input manifest records a display refresh rate and writes the manifest interruption flag into the rebuilt report, so re-analysis no longer silently downgrades V2 sessions to V1. `rwp import-presentmon` accepts `--refresh-rate-hz` for refresh-aware imports; non-finite or non-positive rates are rejected.
 - Rename legacy `docs/adr/ADR-*.md` records to the indexed `NNNN-*.md` convention as `-supplement-*` detail files alongside the canonical summaries; no decision content was removed and `tools/check_docs.py` still passes.
-- Ignore Python `__pycache__/` artifacts and add an optional advisory `.githooks/pre-commit` guard (`cargo fmt --check`, `git diff --check`, `check_docs.py`) enabled via `git config core.hooksPath .githooks`; CI remains the verification gate.
 - Version BackgroundInterference as `background_interference.v3`: a capture where fewer than `background_min_aligned_fraction` (default 0.50) of stutter events overlap background bursts now records `background.low_alignment` contradicting evidence (weight 40) and reports the reduced score instead of the previous maximum; zero alignment still never activates.
 - Evaluate `thermal.v2` only after both the frame-sample and documented system-sample minima are met, matching other telemetry-based rules; a short hot/clock-drop trace no longer activates from the frame-sample path alone.
 - Reject alpha values at or outside `(0, 1)` consistently in paired inference and A/A CLI calibration; zero was admitted by Rust's lower-inclusive range check and overflowed the minimum-pair recommendation.
-- Fix the generated stutter property test's assertion formatting after both CI Clippy jobs rejected closure expressions embedded in `prop_assert!`; place ADR-0025 under the four-digit filename convention required by the documentation checker.
 - Add property-based stutter invariants for ordered, non-overlapping events and merge-gap enforcement across generated hitch patterns.
 - Derive the A/A calibration minimum-pair recommendation from its selected alpha instead of always reporting six; expose and test the same exact-sign-test eligibility calculation used by paired inference.
 - Add a GUI opt-out for RWP's extra process/thread telemetry probing; PresentMon frame capture and system CPU/RAM sampling remain active, unavailable process/GPU observations stay absent, and the setting is persisted in manifest provenance.
@@ -57,10 +51,9 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 - Apply the exact Rust 1.99.0 rustfmt output to session-history validation and canonical-root regression tests after CI #587 reported four formatting-only hunks; runtime behavior and assertions are unchanged.
 - Configure `tauri_build::AppManifest::commands` for the exact seven commands registered by the native application, generating explicit command allow/deny permissions. The build script uses `try_build` and fails the build if permission metadata generation fails.
 - Restrict persisted-session identifiers to 1–96 ASCII letters/digits/dots/underscores/hyphens, reject Windows DOS device names and trailing dots, and normalize generated identifiers so they remain valid. Canonicalize session paths and reject entries resolving outside the canonical history root; the history listing skips unsafe names and out-of-root targets. Add regression coverage for reserved names, ADS/colon input, length limits, generated IDs, and root containment.
-- Pass GitHub branch refs through step environment variables instead of interpolating them into shell scripts, reduce workflow token permissions to `contents: read`, and remove the unnecessary full-history checkout. Add a documentation-job regression checker for direct shell interpolation, required context mappings, token scopes, and checkout depth, with five unit tests covering safe and unsafe workflow fixtures.
 
 ### System telemetry
-- Fix PDH GPU Engine array handling to use the successful fill-call item count, validate it against allocated slots, zero-initialize backing storage, and re-query on `PDH_MORE_DATA` with a three-attempt bound. Treat a zero-size/zero-item sizing result as absent telemetry (`None`), and add regression coverage for shrinking instance counts and out-of-bounds reported counts. Hardware-specific counter behavior remains subject to Windows CI and reference-machine validation.
+- Fix PDH GPU Engine array handling to use the successful fill-call item count, validate it against allocated slots, zero-initialize backing storage, and re-query on `PDH_MORE_DATA` with a three-attempt bound. Treat a zero-size/zero-item sizing result as absent telemetry (`None`), and add regression coverage for shrinking instance counts and out-of-bounds reported counts. Hardware-specific counter behavior remains subject to reference-machine validation.
 
 ### Operational diagnostics
 - Apply the exact pinned Rust 1.99.0 rustfmt layout for the production `sync::{Arc, Mutex}` import after the test-only atomic imports were removed; formatting only, no runtime behavior change.
@@ -81,15 +74,6 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 - Give each persistence test a unique temporary directory to prevent Windows parallel-test collisions.
 - Populate persistence test reports with valid non-empty frame statistics and a matching capture frame; `compute_statistics` correctly rejects empty input. Use the same P99.9 reliability threshold in the test report and computed statistics.
 
-### CI formatting remediation
-- Applied the pinned Rust 1.99.0 rustfmt changes requested by CI #571 to the CLI doctor, CLI dispatch/tests, and diagnostic regression tests. This is formatting-only; diagnostic behavior and thresholds are unchanged.
-
-
-### CI compile and lint remediation
-- Restored the PresentMon CSV resource-limit constants as real Rust declarations and added boundary regression tests for the 512 MiB input-size and 10 million frame-row guards without allocating oversized fixtures.
-- Removed unsupported derives from a configuration error carrying `std::io::Error`, imported the runner in its regression test module, passed the child process by reference into the Windows Job Object owner API, documented public error and persisted capture-provenance fields exposed by `missing_docs`, added `// SAFETY:` comments to Win32 last-error reads, and fixed Windows session borrow/unused-import errors. Added the existing workspace `serde` and `rwp-system` dependencies required by doctor JSON serialization and PresentMon preflight; reconciled `Cargo.lock`, fixed the report-format test import, and made the CLI E2E process helper fallible with documented test-crate metadata. Also preserved the stable CSV error code through `PresentMonCaptureError::Csv` wrapping after an existing regression test exposed the classifier's generic-capture precedence; the failing test remains unchanged; also added the explicit `PathBuf` import required by the Windows-only session test after Clippy exposed it. Fixed the telemetry line-count loop to ignore an unused item binding while preserving blank-line filtering and the existing sample cap. A subsequent pinned CI pass is pending.
-
-
 ### Diagnostic test coverage
 - Expanded the WP6 rule matrix with positive fire cases for aligned background CPU bursts and frame-pacing tail/event-rate evidence, plus CPU and RAM/VRAM no-fire cases for low or absent evidence.
 - Corrected the GPU-bound no-fire fixture to set `gpu_busy_ms = None` explicitly while keeping `gpu_time_ms` high, so the regression actually tests the intended missing-observation contract. Rule behavior and thresholds are unchanged.
@@ -108,10 +92,6 @@ work is recorded in `docs/autopilot/STATE.md`, never here.
 
 ### Build reproducibility
 - Reconciled `Cargo.lock` workspace-package dependency lists with current manifests: removed the stale `rwp-ui` dependency from `rwp-session` and added the declared `rwp-analysis` dependency to `rwp-ui-native`. This addresses CI #562's `--locked` lockfile-update failure without changing registry package versions or weakening any gate.
-
-### CI workflow policy
-- Aligned the CI trigger gate with the documented policy: deep audit remains mandatory, local builds/tests are optional, and pushes to `development` run platform, schema, dependency, installer, and documentation gates.
-- Fixed the first development CI run's formatting failures using the exact pinned-runner rustfmt output, restored ADR-0021..0024 files referenced by the ADR index, and aligned MASTER_PLAN with the optional-local-verification policy. Re-triggered CI from `development` with commit `18486d3681f152889506647f3ea2f3219c00bf58` and `Deep-Audit: PASS`; the connector has not exposed the new run result yet.
 
 ### Autopilot — WP5
 - Added a 64-level explicit JSON nesting guard before persisted manifest deserialization, plus bounded manifest serialization and regression tests for nested arrays and bracket characters inside strings.

@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-12T02:00:00+07:00
-repo_ref: USANG sejak 2026-10-10 — git tak dipakai lagi (nilai terakhir: main @ 902c512; jejak tertulis pindah ke Log + laporan)
-active_wp: WP7 (alpha release prep)
+last_updated: 2026-10-12T02:15:00+07:00
+repo_ref: main @ d7b3dec + tag v0.1.0-alpha (published as GitHub pre-release 2026-10-11); git dipakai untuk publish (commit/push/tag atas perintah owner); klaim perilaku tetap via baca file langsung + output gate yang ditempel di Log, bukan via git log/diff
+active_wp: post-alpha (follow-ups: PresentMon smoke test, threat-model sign-off, hardware matrix — all BLOCKED_ON_USER)
 ---
 
-## Status WP (alpha scope 0.1.0; v1.0 hardware acceptance stays BLOCKED_ON_USER; local gate 2026-10-11 green: fmt/clippy/test 298/deny/audit/schemas/docs/unit-10/links-68)
+## Status WP (alpha scope 0.1.0; v1.0 hardware acceptance stays BLOCKED_ON_USER; local gate 2026-10-11 green: fmt/clippy/test 298/deny/audit/schemas/docs/unit-10/links-70)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -60,11 +60,12 @@ active_wp: WP7 (alpha release prep)
 | RC-08 | DONE (alpha, sign-off pending) | Size/line/UTF-8/depth/count bounds + no-panic properties + threat-model draft in tree; gates green. Owner threat-model sign-off PENDING (BLOCKED_ON_USER). |
 | RC-09 | DONE (alpha, unsigned) | Fase 6: NSIS 2 bundles + SHA256 + SBOM/licenses/provenance + SmartScreen doc + migrate; Step 4 re-verify 2026-10-12: offline bundle 219,086,102 bytes SHA256 3d587dc1..., per-user silent install/uninstall OK, app start OK, user data preserved. Signing BLOCKED_ON_USER (certificate/service). |
 | RC-10 | DONE (alpha) | Fase 6: zero-socket code inventory + Windows dep-graph zero HTTP-client (reqwest/hyper only non-Windows edges) + CLI proxy-off run OK; 20 s app run zero connections per PID. |
-| RC-11 | DONE (alpha) | Fase 7 docs + check_docs + unit 10/10 + check_links 68 docs green 2026-10-11. |
+| RC-11 | DONE (alpha) | Fase 7 docs + check_docs + unit 10/10 + check_links 70 docs green 2026-10-11. |
 | RC-12 | BLOCKED_ON_USER | Hardware acceptance matrix required; not run. |
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-12 Post-alpha audit follow-up (docs only, zero source changes): moved CI-era process entries out of CHANGELOG into docs/autopilot/archive/CHANGELOG-ci-era.md (coverage gate, mutation.yml, fuzz-scheduled.yml, packaging split, pre-commit/CI-gate line, CI-Clippy-jobs line, workflow-security checker, CI formatting + compile/lint remediation sections, CI workflow policy) and fixed the "Windows CI" claim to reference-machine validation; header now records tag v0.1.0-alpha published. STATE header/NEXT updated for the published alpha (repo_ref points at main @ d7b3dec + tag; NEXT lists post-alpha follow-ups). local-gates.md git/CI wording aligned with GitHub reality (no workflows in repo, remote for publish only; gate authority and order unchanged). SECURITY.md reporting channel set to GitHub Security Advisories. Release notes install step points at the published GitHub Release with download link + SHA256. Ledger M9/M10 PR/CI-run references labeled archive-era. check_docs + check_links re-run after edits (see evidence below).
 - 2026-10-12 Alpha prep Step 6 final gate (pinned 1.99.0, --locked, after docs + installer): fmt EXIT 0; clippy EXIT 0 (-D warnings); test EXIT 0, 298 passed / 0 failed; deny EXIT 0 (duplicate-version warnings only); audit EXIT 0 (1296 advisories, 498 deps, 2 allowed RUSTSEC-2024-0370/0429); validate_schemas PASS; check_docs PASS; unit checker 10/10 PASS; check_links PASS (70 documents, 0 external). Zero source changes in alpha-prep batch (docs + release notes + STATE only; installer rebuilt from unchanged sources).
 - 2026-10-12 Alpha prep Step 5 smoke test: BLOCKED_ON_USER — no `PresentMon.exe` on this machine (`Get-Command PresentMon.exe` empty, no `C:\Tools` bundle, no repo copy), so no real doctor -> import/capture -> analyze -> report -> compare flow was run and nothing was faked. CLI sanity only: `cargo run --locked -p rwp-cli -- doctor` EXIT 0 with `presentmon: null`, `offline.engine ok:true` (no network). Owner manual checklist: (1) install Intel PresentMon, note version + SHA-256; (2) `rwp doctor --presentmon <PATH>` must pass; (3) GUI live capture 60 s vs a real target (or `import-presentmon` a real CSV); (4) `analyze` -> `report --format md` -> two-session `compare --same-scenario`; (5) paste outputs + session manifest hashes into STATE before calling RC-06/RC-07 done.
 - 2026-10-12 Alpha prep Step 4 installer (from current tree, binaries NOT committed): `cargo tauri build --bundles nsis` in `crates/rwp-ui-native/src-tauri` EXIT 0 (release build 43.80 s, makensis OK, 208.94 MiB). Bundle `target/release/bundle/nsis/RidTheWann Performance_0.1.0_x64-setup.exe`: 219,086,102 bytes, SHA256 `3d587dc1c9ed8c00e547cab45afa5c957a9abd05e03a6dfe0745b1936bb89f7b` (SHA256SUMS generated in temp dir outside repo, not committed). Silent per-user install `...setup.exe /S` OK (files at `%LOCALAPPDATA%/RidTheWann Performance/rwp-ui-native.exe` + `uninstall.exe`); app start OK (`rwp-ui-native` PID 12624 observed); silent uninstall `uninstall.exe /S` OK (app dir removed); user data preserved (`%LOCALAPPDATA%/RidTheWann` still present). Config is `offlineInstaller` (ADR-0029); default bootstrapper bundle not rebuilt in this batch.
@@ -83,7 +84,7 @@ active_wp: WP7 (alpha release prep)
 
 ## NEXT
 
-alpha release prep: finish Step 2 doc sync (ledger/README/CHANGELOG) -> write docs/release/0.1.0-alpha.md -> build + verify NSIS bundle(s) with SHA256SUMS -> smoke test or BLOCKED_ON_USER checklist -> final gate.
+post-alpha follow-ups (all BLOCKED_ON_USER, in priority order): run one real PresentMon smoke flow (see Step 5 checklist) -> record outputs + manifest hashes in STATE -> obtain threat-model sign-off -> hardware acceptance matrix. No source changes planned.
 
 ## Keputusan terbuka
 

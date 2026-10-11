@@ -1,15 +1,18 @@
 # Local Gates — Otoritas Verifikasi Pengganti CI (Fase 0)
 
-Status: MENGIKAT sejak Fase 0. CI GitHub mati bersama remote (`.github/` dihapus);
-gate lokal di bawah adalah satu-satunya otoritas verifikasi sampai repo baru
-(Fase 8) memiliki baseline CI hijau sendiri.
+Status: MENGIKAT sejak Fase 0. Tidak ada GitHub Actions workflow di repo
+(`.github/` absent, verified 2026-10-12); remote GitHub dipakai untuk publish
+saja (branch `main` + tag `v0.1.0-alpha`, atas perintah owner). Gate lokal di
+bawah adalah satu-satunya otoritas verifikasi; tidak ada CI yang
+menggantikannya.
 
-> Catatan 2026-10-10 (kebijakan owner, berlaku segera): git tidak dipakai
-> untuk apa pun lagi — tanpa log/status/diff/commit/tag/branch. Frasa
-> "tree bersih (`git status ...`)" di §3 dan `repo_ref` di header STATE
-> dinyatakan USANG; verifikasi berjalan via baca file langsung + output gate
-> yang ditempel di STATE. Revisi penuh dokumen ini menyusul tanpa mengganggu
-> kerja alpha; otoritas gate dan urutan perintah tak berubah.
+> Catatan 2026-10-12 (revisi kebijakan owner): git dipakai untuk publish —
+> commit/push/tag atas perintah eksplisit owner, di branch `main` saja tanpa
+> branches kerja. Yang tetap berlaku dari catatan 2026-10-10: tanpa
+> mengandalkan git log/diff untuk klaim perilaku; verifikasi berjalan via
+> baca file langsung + output gate yang ditempel di STATE. Frasa "tree bersih
+> (`git status ...`)" di §3 dibaca sebagai `git status` untuk kebersihan tree
+> dan pra-commit. Otoritas gate dan urutan perintah tak berubah.
 
 ## 1. Pin toolchain
 
@@ -52,9 +55,11 @@ Windows yang diharapkan adalah 298.
 - Klaim lama bertanda "CI-verified" / run-ID / PR GitHub dinyatakan
   tak-terverifikasi-ulang; penggantinya adalah baris "locally-verified" dengan
   output gate di STATE.
-- Tree harus bersih sebelum gate dijalankan — USANG sejak 2026-10-10: klausa
-  `git status` dihapus (git tak dipakai); penggantinya: batch melaporkan
-  daftar file yang diubah/dibuat, diverifikasi via baca file langsung.
+- Tree harus bersih sebelum gate dijalankan (`git status`): tidak ada file
+  tak-terstage di luar yang disengaja, dan tidak ada binary/artefak build
+  (`target/`, `*.exe`, `SHA256SUMS`) yang ikut ter-stage. Klaim perilaku
+  tetap diverifikasi via baca file langsung + output gate yang ditempel di
+  STATE, bukan via `git log`/`git diff`.
 
 ## 4. Daftar pensiun eksplisit (non-berlaku sejak Fase 0)
 

@@ -6,11 +6,11 @@ RidTheWann Performance is intended to be an offline-first Windows performance an
 
 Do not publish sensitive telemetry, credentials, private paths, or unredacted process inventories in public issues.
 
-Report suspected vulnerabilities privately to the maintainer. The direct
-contact channel is published with the new repository (Fase 8); until then,
-use the maintainer channel you already have and never file a public issue
-for a suspected vulnerability. Attach only redacted bundles (`rwp doctor
---bundle`, redaction on by construction).
+Report suspected vulnerabilities privately via GitHub Security Advisories
+(repository Security tab → "Report a vulnerability":
+`https://github.com/RidTheWann/RWP-Project/security/advisories/new`).
+Never file a public issue for a suspected vulnerability. Attach only
+redacted bundles (`rwp doctor --bundle`, redaction on by construction).
 
 ## Design security boundary
 

@@ -231,7 +231,7 @@ M9 deliberately preserves the existing non-causal diagnostic boundary: correlati
 
 ## Verification status
 
-M9 PR #19 was squash-merged after CI run #207 completed successfully against head `6205a69dce71da324ac9111721bafa4e93b963f0`. Both `Rust checks` and `MSRV 1.91.0` passed every reported step.
+M9 PR #19 was squash-merged after CI run #207 completed successfully against head `6205a69dce71da324ac9111721bafa4e93b963f0`. Both `Rust checks` and `MSRV 1.91.0` passed every reported step. (Arsip era-CI: nomor PR/run dan workflow adalah catatan sejarah, bukan otoritas verifikasi — otoritasnya `docs/local-gates.md`.)
 
 Release-readiness debt remains explicit: the source-tree `Cargo.lock` and installer/release packaging are not part of the merged M9 implementation.
 
@@ -248,7 +248,7 @@ M10 does not silently redistribute or download PresentMon and does not introduce
 
 ## Verification status
 
-M10 PR #21 was squash-merged after CI run #211 completed successfully. Both `Rust checks` and `MSRV 1.91.0` passed every reported step.
+M10 PR #21 was squash-merged after CI run #211 completed successfully. Both `Rust checks` and `MSRV 1.91.0` passed every reported step. (Arsip era-CI: nomor PR/run dan workflow adalah catatan sejarah, bukan otoritas verifikasi — otoritasnya `docs/local-gates.md`.)
 
 ## Next
 
