@@ -2,7 +2,7 @@
 
 Release notes for this alpha: `0.1.0-alpha.md`.
 
-Unreleased tree (post-alpha, version stays `0.1.0`): `unreleased.md`.
+Unreleased tree (post-alpha, version `0.2.0` in tree): `unreleased.md`.
 
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.

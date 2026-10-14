@@ -1,12 +1,12 @@
-# RidTheWann Performance — 0.1.0 ALPHA
+# RidTheWann Performance — 0.2.0 post-alpha
 
 **Measure. Diagnose. Prove.**
 
-> ALPHA scope (0.1.0, version stays 0.1.0): single-device validated only
-> (see `docs/methodology.md` §7 and `docs/limitations.md`); installer is
-> unsigned (expect a SmartScreen "unknown publisher" warning);
+> Post-alpha scope (0.2.0 in tree; alpha 0.1.0 record frozen): single-device
+> validated only (see `docs/methodology.md` §7 and `docs/limitations.md`);
+> installer is unsigned (expect a SmartScreen "unknown publisher" warning);
 > PresentMon.exe is user-supplied (live capture is Windows-only via the GUI or
-> the `rwp capture` CLI). Details: `docs/release/0.1.0-alpha.md`.
+> the `rwp capture` CLI). Alpha record: `docs/release/0.1.0-alpha.md`.
 
 RidTheWann Performance (rwp) is an evidence-based gaming and streaming performance analyzer for Windows 11. It correlates frame timing with system state, detects reproducible failure patterns, and explains evidence without treating a heuristic score as probability.
 
