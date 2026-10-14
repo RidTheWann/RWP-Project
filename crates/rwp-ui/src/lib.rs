@@ -313,6 +313,28 @@ fn format_signed(value: i64) -> String {
     }
 }
 
+/// Toast payload for a completed stable session, if one is present.
+///
+/// Returns the banner's own headline and detail so the toast and the in-app
+/// banner (the fallback surface and source of truth) always agree. Only
+/// observation counts enter the strings — application names, paths, PIDs,
+/// and other identities never do, so the payload is redacted by
+/// construction.
+pub fn stable_notification_content(diagnostics: &[Diagnostic]) -> Option<(String, String)> {
+    let stable = diagnostics.iter().find(|diagnostic| {
+        diagnostic.rule_id == "stability.v1" && diagnostic.category == DiagnosticCategory::Stable
+    })?;
+    // Zero stutter events is part of the stability.v1 contract the match
+    // above already established, so the banner reflects it directly.
+    let banner = render_stability_banner(
+        PreliminaryStability::Stable,
+        stable.sample_count,
+        stable.minimum_sample_count,
+        0,
+    );
+    Some((banner.headline, banner.detail))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DashboardTab, UiState, build_dashboard_model};
@@ -454,6 +476,63 @@ mod tests {
         assert_eq!(model.metrics.len(), 4);
         assert!(model.comparison.is_none());
         Ok(())
+    }
+
+    fn stable_diagnostic() -> Result<rwp_core::Diagnostic, Box<dyn std::error::Error>> {
+        use rwp_core::{EvidenceItem, EvidencePolarity};
+        Ok(rwp_core::Diagnostic::new(
+            rwp_core::DiagnosticCategory::Stable,
+            String::from("stability.v1"),
+            70,
+            vec![EvidenceItem {
+                evidence_id: String::from("stability.no_stutter_events"),
+                polarity: EvidencePolarity::Supporting,
+                statement: String::from("synthetic"),
+                weight: 35,
+            }],
+            Vec::new(),
+            Vec::new(),
+            64,
+            60,
+        )?)
+    }
+
+    #[test]
+    fn stable_notification_content_matches_banner() -> Result<(), Box<dyn std::error::Error>> {
+        // Hostile identities elsewhere must not leak: the payload carries
+        // only counts plus static literals.
+        use rwp_core::{EvidenceItem, EvidencePolarity};
+        let hostile = rwp_core::Diagnostic::new(
+            rwp_core::DiagnosticCategory::CpuBound,
+            String::from("cpu_bound.v1"),
+            70,
+            vec![EvidenceItem {
+                evidence_id: String::from("../../evil|user@host"),
+                polarity: EvidencePolarity::Supporting,
+                statement: String::from("../../evil|user@host"),
+                weight: 35,
+            }],
+            Vec::new(),
+            Vec::new(),
+            64,
+            60,
+        )?;
+        let stable = stable_diagnostic()?;
+        let diagnostics = vec![hostile, stable];
+        let banner =
+            super::render_stability_banner(rwp_core::PreliminaryStability::Stable, 64, 60, 0);
+        let (title, body) = super::stable_notification_content(&diagnostics)
+            .ok_or("a Stable stability.v1 diagnostic must produce toast content")?;
+        assert_eq!(title, banner.headline);
+        assert_eq!(body, banner.detail);
+        assert!(!title.contains("evil"));
+        assert!(!body.contains("evil"));
+        Ok(())
+    }
+
+    #[test]
+    fn stable_notification_absent_without_stable_verdict() {
+        assert_eq!(super::stable_notification_content(&[]), None);
     }
 
     #[test]

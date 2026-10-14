@@ -47,6 +47,10 @@ pub struct SessionStartRequest {
     /// Disable RWP's additional process/thread telemetry probing.
     #[serde(default)]
     pub no_process_probing: bool,
+    /// Disable the instant-stability toast notification. Notifications are on
+    /// by default; the in-app banner always renders regardless of this flag.
+    #[serde(default)]
+    pub disable_stable_notification: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -151,6 +155,29 @@ fn emit_session_event<R: Runtime>(app: Option<&AppHandle<R>>, event: &SessionEve
     if let Some(app) = app {
         let _ = app.emit("rwp-session-event", event);
     }
+}
+
+/// Shows the instant-stability toast for a completed session carrying a
+/// Stable verdict, best effort.
+///
+/// The payload comes from [`rwp_ui::stable_notification_content`] (counts
+/// plus static literals only, never identities). When the runtime refuses —
+/// no notification server, headless host — the call fails silently by
+/// design: the in-app banner renders the same persisted stability.v1
+/// diagnostic and remains the source of truth.
+fn notify_stable_session<R: Runtime>(app: &Option<&AppHandle<R>>, result: &SessionResult) {
+    use tauri_plugin_notification::NotificationExt;
+    let Some((title, body)) = rwp_ui::stable_notification_content(&result.diagnostics) else {
+        return;
+    };
+    let Some(app) = app else { return };
+    let _notified = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .is_ok();
 }
 
 fn now_unix_ms() -> u64 {
@@ -486,8 +513,12 @@ impl SessionManager {
     }
 }
 
-fn run_session_worker<F, R>(manager: SessionManager, app: Option<&AppHandle<R>>, operation: F)
-where
+fn run_session_worker<F, R>(
+    manager: SessionManager,
+    app: Option<&AppHandle<R>>,
+    operation: F,
+    notify_on_stable: bool,
+) where
     F: FnOnce() -> Result<SessionResult, rwp_session::SessionError>,
     R: Runtime,
 {
@@ -497,6 +528,9 @@ where
                 process_id: result.process_id,
                 frame_count: result.report.frame_count,
             };
+            if notify_on_stable {
+                notify_stable_session(&app, &result);
+            }
             if manager.finish(result).is_ok() {
                 emit_session_event(app, &event);
                 tracing::info!(target: "rwp", event = "session_completed");
@@ -740,10 +774,15 @@ pub fn session_start(
             let manager = SessionManager {
                 state: state_handle,
             };
-            run_session_worker(manager, Some(&event_app), || {
-                let runner = SessionRunner;
-                runner.run(&config, &cancellation)
-            });
+            run_session_worker(
+                manager,
+                Some(&event_app),
+                || {
+                    let runner = SessionRunner;
+                    runner.run(&config, &cancellation)
+                },
+                !request.disable_stable_notification,
+            );
         }) {
         Ok(_worker) => {
             emit_session_event(
@@ -1048,6 +1087,22 @@ mod audit_regressions {
     }
 
     #[test]
+    fn frontend_grants_no_notification_permission() {
+        // The toast is sent from Rust through the plugin backend; the webview
+        // must never gain notification IPC. Any future grant fails closed here
+        // and needs a threat-model re-review first.
+        for file in [
+            include_str!("../capabilities/default.json"),
+            include_str!("../permissions/default.toml"),
+        ] {
+            assert!(
+                !file.contains("notification"),
+                "notification IPC must stay ungranted to the webview"
+            );
+        }
+    }
+
+    #[test]
     fn bounded_session_reader_rejects_oversized_files() -> Result<(), Box<dyn std::error::Error>> {
         let path = std::env::temp_dir().join("rwp-tauri-bounded-session-test.json");
         std::fs::write(&path, b"12345")?;
@@ -1065,6 +1120,7 @@ mod audit_regressions {
             || -> Result<_, rwp_session::SessionError> {
                 panic!("synthetic worker panic");
             },
+            false,
         );
         assert!(matches!(
             manager.snapshot().ok(),

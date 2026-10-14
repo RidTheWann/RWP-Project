@@ -11,6 +11,7 @@ fn main() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .manage(commands::SessionManager::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::session_start,
             commands::session_stop,
