@@ -50,5 +50,11 @@ claim is tested.
   certificate.
 - WebView2 runtime ships inside the release bundle (offline installer mode);
   first-run provisioning beyond that path is unverified.
-- Live capture is Windows-only; analysis of persisted sessions is
-  platform-neutral.
+- Live capture (GUI and `rwp capture` CLI) is Windows-only; analysis of
+  persisted sessions is platform-neutral. The CLI reuses the GUI session
+  orchestration and manifest layout, but live-capture validation on reference
+  hardware with real PresentMon remains outstanding.
+- A Ctrl+C-interrupted `rwp capture` persists a partial session and exits 0
+  with an `interrupted: partial session saved at <dir>` stderr notice (owner
+  decision, see `docs/cli-errors.md`); a repeat signal still ends the process
+  without persisting. Installing the Ctrl+C handler requires a console.

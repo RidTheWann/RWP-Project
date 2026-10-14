@@ -56,3 +56,6 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 ## Evidence
 
 Record pass/fail, exact build SHA, session manifest SHA-256, PresentMon SHA-256, and remediation for each failed item. Do not attach unredacted diagnostic bundles to public issues.
+
+For the real-PresentMon CLI smoke flow (doctor, import, analyze, report,
+compare with redacted summary), follow `smoke-test.md`.

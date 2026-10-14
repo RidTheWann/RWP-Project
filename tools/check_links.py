@@ -80,12 +80,22 @@ def check(document):
     return failures, external
 
 
-def main():
-    documents = sorted(
-        path
-        for path in ROOT.rglob("*.md")
-        if "target" not in path.parts and ".git" not in path.parts
+#: Directory names never scanned for documents. Besides VCS and build
+#: output, this covers git-ignored local output trees (owner smoke-test
+#: results), dependency directories, and bytecode caches, so the document
+#: count stays deterministic and no git access is needed.
+SKIP_DIRS = frozenset({"target", ".git", "smoke-out", "node_modules", "__pycache__"})
+
+
+def collect_documents(root):
+    """All Markdown files under root, minus skipped trees, sorted."""
+    return sorted(
+        path for path in root.rglob("*.md") if SKIP_DIRS.isdisjoint(path.parts)
     )
+
+
+def main():
+    documents = collect_documents(ROOT)
     failures = []
     external = 0
     for document in documents:

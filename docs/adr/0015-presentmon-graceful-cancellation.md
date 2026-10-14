@@ -23,3 +23,14 @@ Unsafe Windows API access remains isolated to `rwp-system` and carries a `// SAF
 - Interrupted captures are distinguishable from failed captures.
 - The fallback does not claim graceful shutdown when Windows could not deliver the control event.
 - End-to-end verification on the reference Windows environment remains required before AUD-03 is marked VERIFIED.
+
+## Amended by ADR-0032
+
+The direct `GenerateConsoleCtrlEvent` above has a console-sharing
+precondition: it only reaches processes sharing the caller's console. The
+release GUI has no console, so its cancels always took the kill fallback.
+ADR-0032 keeps this direct path for console-attached callers and adds, for
+console-less callers, `CREATE_NO_WINDOW` at spawn plus an attach-signal-then-
+always-free sequence (`AttachConsole` → `GenerateConsoleCtrlEvent` → always
+`FreeConsole`, mutex-serialized), selected from a flag recorded at spawn, with
+`StopOutcome::{Graceful, Killed}` reporting which path finished the child.

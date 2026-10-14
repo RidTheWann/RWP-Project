@@ -2,7 +2,11 @@
 
 #![allow(unsafe_code)]
 
-use std::{collections::HashMap, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Instant,
+};
 
 use nvml_wrapper::{
     Nvml,
@@ -259,6 +263,169 @@ pub fn verify_presentmon_authenticode(path: &std::path::Path) -> AuthenticodeSta
         AuthenticodeStatus::NotSigned
     } else {
         AuthenticodeStatus::VerifyFailed { code: status }
+    }
+}
+
+/// Reports whether the calling process is attached to a console.
+///
+/// The PresentMon spawn path records this once per child: a child spawned by a
+/// console-attached caller shares that console, so a direct
+/// `GenerateConsoleCtrlEvent` reaches its process group; a child of a
+/// console-less caller (release GUI with `windows_subsystem = "windows"`,
+/// detached helpers) needs the attach-then-signal path instead.
+pub fn caller_has_console() -> bool {
+    use windows_sys::Win32::System::Console::GetConsoleProcessList;
+    let mut buffer = [0u32; 2];
+    // SAFETY: buffer is a live two-element array; the API writes at most the
+    // given length and otherwise only reads the calling thread's console
+    // attachment state. A nonzero return means a console exists (the exact
+    // count does not matter here).
+    let count = unsafe { GetConsoleProcessList(buffer.as_mut_ptr(), buffer.len() as u32) };
+    count != 0
+}
+
+/// Failure of the attach-then-signal BREAK path used by console-less callers.
+///
+/// Raw Win32 codes are preserved so stop-path diagnostics can name the exact
+/// failure (for example `AttachConsole` refusing an already-attached caller).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum DetachedBreakError {
+    /// `AttachConsole` could not attach to the child's console.
+    #[error("AttachConsole failed with Windows error code {code}")]
+    AttachFailed {
+        /// Error code returned by GetLastError.
+        code: u32,
+    },
+    /// The control event could not be delivered after attaching.
+    #[error("GenerateConsoleCtrlEvent failed with Windows error code {code}")]
+    SignalFailed {
+        /// Error code returned by GetLastError.
+        code: u32,
+    },
+}
+
+/// Serializes console attach/signal sequences.
+///
+/// Console attachment is process-global: concurrent attach/free pairs from
+/// several stop requests would detach each other's console mid-signal.
+static CONSOLE_SIGNAL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Sends CTRL+BREAK to a process group owned by a console-less caller.
+///
+/// Attaches to the child's console, delivers `CTRL_BREAK_EVENT` to the given
+/// group, and always detaches again — including on failure — so the caller
+/// never keeps a borrowed console. The caller must have no console of its own
+/// (see [`caller_has_console`]); the child must own one.
+pub fn send_break_to_detached_group(process_group_id: u32) -> Result<(), DetachedBreakError> {
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, CTRL_BREAK_EVENT, FreeConsole, GenerateConsoleCtrlEvent,
+    };
+
+    let _guard = CONSOLE_SIGNAL_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // SAFETY: AttachConsole takes only the target process identifier and
+    // touches no caller memory; the serialized guard keeps concurrent stop
+    // requests from interleaving attach/free pairs.
+    let attached = unsafe { AttachConsole(process_group_id) };
+    if attached == 0 {
+        // SAFETY: GetLastError reads the calling thread error state.
+        let code = unsafe { GetLastError() };
+        return Err(DetachedBreakError::AttachFailed { code });
+    }
+    // SAFETY: the caller is attached to the child's console (just attached
+    // above) and passes only the group identifier obtained from Child::id().
+    let sent = unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, process_group_id) };
+    let signal_code = if sent == 0 {
+        // SAFETY: GetLastError reads the calling thread error state and takes
+        // no pointers; it runs before FreeConsole on the same thread.
+        Some(unsafe { GetLastError() })
+    } else {
+        None
+    };
+    // SAFETY: FreeConsole detaches the borrowed console and takes no pointers;
+    // it runs on every path after a successful attach so no borrowed console
+    // is ever retained, even when delivery failed.
+    let _ = unsafe { FreeConsole() };
+    match signal_code {
+        None => Ok(()),
+        Some(code) => Err(DetachedBreakError::SignalFailed { code }),
+    }
+}
+
+/// Process-wide stop request shared with the installed console handler.
+///
+/// There is exactly one flag on purpose: the handler is a bare callback with
+/// no context, and the CLI runs a single capture per process. [`ConsoleStopGuard`]
+/// resets it on install.
+static CAPTURE_STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Shared stop flag written by the console handler.
+///
+/// Pass it as the cancellation input to the session runner so the first
+/// CTRL+C or CTRL+BREAK turns into a graceful stop with a persisted partial
+/// session instead of process death.
+pub fn capture_stop_flag() -> &'static AtomicBool {
+    &CAPTURE_STOP_REQUESTED
+}
+
+/// RAII console-control handler for live capture.
+///
+/// Installing routes the first CTRL+C or CTRL+BREAK into
+/// [`capture_stop_flag`]; a repeat signal while a stop is already in progress
+/// is left to default handling so the process still ends (and the
+/// kill-on-close Job Object still terminates PresentMon). Dropping removes
+/// the handler again. Close/logoff/shutdown keep default handling.
+pub struct ConsoleStopGuard {
+    /// Token type: construction installs, drop uninstalls.
+    _token: (),
+}
+
+impl ConsoleStopGuard {
+    /// Installs the handler and arms a fresh stop request.
+    pub fn install() -> Result<Self, SystemTelemetryError> {
+        use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+        CAPTURE_STOP_REQUESTED.store(false, Ordering::SeqCst);
+        // SAFETY: the handler is a plain function item with the documented
+        // `unsafe extern "system" fn(u32) -> BOOL` shape that only flips an
+        // atomic and reads no caller memory.
+        let installed = unsafe { SetConsoleCtrlHandler(Some(console_stop_handler), 1) };
+        if installed == 0 {
+            return Err(SystemTelemetryError::ConsoleControl);
+        }
+        Ok(Self { _token: () })
+    }
+}
+
+impl Drop for ConsoleStopGuard {
+    fn drop(&mut self) {
+        use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+        // SAFETY: removes exactly the routine installed above; the flag is
+        // left untouched because it belongs to the finished run.
+        let _ = unsafe { SetConsoleCtrlHandler(Some(console_stop_handler), 0) };
+    }
+}
+
+/// Console callback behind [`ConsoleStopGuard`].
+///
+/// Atomically claims the stop and then applies the pure
+/// [`crate::decide_console_signal`] core to the previous state, so the first
+/// CTRL+C or CTRL+BREAK is consumed exactly once even if signals race, while
+/// repeats and close/logoff/shutdown keep default handling.
+unsafe extern "system" fn console_stop_handler(ctrl_type: u32) -> windows_sys::core::BOOL {
+    use windows_sys::Win32::Foundation::{FALSE, TRUE};
+    use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT};
+    if ctrl_type != CTRL_C_EVENT && ctrl_type != CTRL_BREAK_EVENT {
+        return FALSE;
+    }
+    // SAFETY: swap on a process-wide atomic needs no pointers; serializing
+    // with the install-time reset below keeps one capture's lifetime exact.
+    let already_stopping = CAPTURE_STOP_REQUESTED.swap(true, Ordering::SeqCst);
+    if crate::decide_console_signal(ctrl_type, already_stopping) {
+        TRUE
+    } else {
+        FALSE
     }
 }
 
@@ -1185,6 +1352,19 @@ mod tests {
         }
         assert_eq!(stats.sample_count(), (SAMPLER_STATS_WINDOW + 17) as u64);
         assert_eq!(stats.rolling_window_size(), SAMPLER_STATS_WINDOW);
+    }
+
+    #[test]
+    fn console_detection_and_attach_error_report_real_win32_codes() {
+        // Test binaries run under a console, so the detector must say so.
+        // Attaching while attached must then refuse with ERROR_ACCESS_DENIED
+        // (5) against our own PID; this pins the raw-code error mapping
+        // instead of asserting on a stubbed error.
+        assert!(super::caller_has_console());
+        match super::send_break_to_detached_group(std::process::id()) {
+            Err(super::DetachedBreakError::AttachFailed { code }) => assert_eq!(code, 5),
+            other => panic!("expected AttachFailed, got {other:?}"),
+        }
     }
 
     #[test]

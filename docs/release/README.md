@@ -2,6 +2,8 @@
 
 Release notes for this alpha: `0.1.0-alpha.md`.
 
+Unreleased tree (post-alpha, version stays `0.1.0`): `unreleased.md`.
+
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.
 
@@ -36,3 +38,6 @@ cargo about generate --format json -o licenses.json
 
 SBOM output embeds absolute local paths, so generated files stay out of the
 tree; only this index and `about.toml` are committed.
+
+Owner smoke-test kit for real-PresentMon evidence: `../acceptance/smoke-test.md`
+(script `../../tools/smoke-test.ps1`, redacted `smoke-out/summary.md`).

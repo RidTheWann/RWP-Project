@@ -53,6 +53,10 @@ pub struct SessionConfig {
     pub stop_existing_session: bool,
     /// Whether to disable RWP's additional process/thread telemetry probing.
     pub no_process_probing: bool,
+    /// Optional manual display refresh rate in Hz for refresh-aware stutter
+    /// analysis. When absent, the runner auto-detects the target display
+    /// (unless probing is disabled, in which case legacy V1 applies).
+    pub display_refresh_rate_hz: Option<f64>,
     /// Diagnostic thresholds applied after capture.
     pub diagnostic_thresholds: RuleThresholds,
     /// Optional directory where the normalized capture, report, telemetry, and manifest are persisted.
@@ -87,6 +91,7 @@ impl SessionConfig {
             exclude_dropped: false,
             stop_existing_session: false,
             no_process_probing: false,
+            display_refresh_rate_hz: None,
             diagnostic_thresholds: RuleThresholds::default(),
             persistence_dir: None,
         })
@@ -125,6 +130,19 @@ impl SessionConfig {
     pub fn with_no_process_probing(mut self, disabled: bool) -> Self {
         self.no_process_probing = disabled;
         self
+    }
+
+    /// Overrides the auto-detected display refresh rate for refresh-aware
+    /// stutter analysis. Validates via the same refresh-aware detector
+    /// contract used by persisted analysis, so CLI and import paths agree.
+    pub fn with_display_refresh_rate_hz(mut self, hz: f64) -> Result<Self, SessionError> {
+        rwp_analysis::RefreshAwareStutterConfig::new(hz).map_err(|_| {
+            SessionError::InvalidConfiguration(
+                "refresh_rate_hz must be finite and greater than zero",
+            )
+        })?;
+        self.display_refresh_rate_hz = Some(hz);
+        Ok(self)
     }
 
     /// Selects a directory for deterministic session persistence.
@@ -199,6 +217,9 @@ pub struct SessionResult {
     pub diagnostics: Vec<Diagnostic>,
     /// Symmetric frame/telemetry observation coverage.
     pub coverage: CoverageSummary,
+    /// How the PresentMon child stopped, when a stop was requested.
+    /// `None` when the capture finished without going through the stop path.
+    pub stop_outcome: Option<rwp_capture::StopOutcome>,
 }
 
 fn timestamp_span_seconds(start: Option<u64>, end: Option<u64>) -> Option<f64> {
@@ -278,13 +299,19 @@ impl SessionRunner {
         let (cpu, gpu, driver) = sampler.hardware_provenance();
 
         let presentmon_config = config.presentmon_config()?;
-        let (display_refresh, display_refresh_warning) = if config.no_process_probing {
-            (None, None)
-        } else {
-            match detect_process_display_refresh_rate(config.process_id) {
+        let (display_refresh, display_refresh_warning) = match config.display_refresh_rate_hz {
+            Some(hz) => (
+                Some(DisplayRefreshRate {
+                    hz,
+                    device_name: String::from("cli-override"),
+                }),
+                None,
+            ),
+            None if config.no_process_probing => (None, None),
+            None => match detect_process_display_refresh_rate(config.process_id) {
                 Ok(value) => (value, None),
                 Err(error) => (None, Some(error.to_string())),
-            }
+            },
         };
         let target = PresentMonTarget::ProcessId(config.process_id);
         let parser = PresentMonCsvParser::new_with_qpc_origin(
@@ -306,7 +333,7 @@ impl SessionRunner {
             system_samples: &mut system_samples,
             telemetry_warnings: &mut telemetry_warnings,
         };
-        let (capture, interrupted) = collect_capture(process, &mut capture_context)?;
+        let (capture, interrupted, stop_outcome) = collect_capture(process, &mut capture_context)?;
 
         let coverage = build_coverage(&capture.frames, &system_samples);
         let capture_document = CaptureDocument {
@@ -349,6 +376,7 @@ impl SessionRunner {
             telemetry_warnings,
             diagnostics,
             coverage,
+            stop_outcome,
         };
 
         if let Some(directory) = config.persistence_dir.as_deref() {
@@ -427,25 +455,32 @@ struct CaptureContext<'a, S: SystemSampler + ?Sized> {
 fn collect_capture<S: SystemSampler + ?Sized>(
     mut process: PresentMonProcess,
     context: &mut CaptureContext<'_, S>,
-) -> Result<(rwp_capture::PresentMonCapture, bool), SessionError> {
+) -> Result<
+    (
+        rwp_capture::PresentMonCapture,
+        bool,
+        Option<rwp_capture::StopOutcome>,
+    ),
+    SessionError,
+> {
     let started = Instant::now();
 
     loop {
         if context.cancellation.load(Ordering::Acquire) {
-            process.terminate()?;
+            let outcome = process.terminate_with_outcome(rwp_capture::GRACEFUL_STOP_TIMEOUT)?;
             let _ = process.wait()?;
             let capture = context.parser.parse_path_with_mode(
                 context.config.output_file.as_path(),
                 context.target,
                 ParseMode::TolerateTruncatedTail,
             )?;
-            return Ok((capture, true));
+            return Ok((capture, true, Some(outcome)));
         }
 
         if started.elapsed() >= context.config.duration {
             return process
                 .finish(context.parser)
-                .map(|capture| (capture, false))
+                .map(|capture| (capture, false, None))
                 .map_err(SessionError::from);
         }
 
@@ -461,7 +496,7 @@ fn collect_capture<S: SystemSampler + ?Sized>(
         if status.is_some() {
             return process
                 .finish(context.parser)
-                .map(|capture| (capture, false))
+                .map(|capture| (capture, false, None))
                 .map_err(SessionError::from);
         }
 
@@ -605,6 +640,111 @@ mod tests {
         let config = SessionConfig::new("PresentMon.exe", "run.csv", 42, 10)?;
         let config = config.with_sample_interval(Duration::from_millis(10))?;
         assert_eq!(config.sample_interval, Duration::from_millis(10));
+        Ok(())
+    }
+
+    #[test]
+    fn display_refresh_override_uses_detector_contract() -> Result<(), Box<dyn std::error::Error>> {
+        let config = SessionConfig::new("PresentMon.exe", "run.csv", 42, 10)?;
+        assert!(config.display_refresh_rate_hz.is_none());
+        let config = config.with_display_refresh_rate_hz(144.0)?;
+        assert_eq!(config.display_refresh_rate_hz, Some(144.0));
+        assert!(
+            SessionConfig::new("PresentMon.exe", "run.csv", 42, 10)?
+                .with_display_refresh_rate_hz(0.0)
+                .is_err()
+        );
+        assert!(
+            SessionConfig::new("PresentMon.exe", "run.csv", 42, 10)?
+                .with_display_refresh_rate_hz(f64::NAN)
+                .is_err()
+        );
+        Ok(())
+    }
+
+    /// AUD-03 case (c): a truncated CSV tail after kill parses tolerantly and
+    /// carries an explicit interrupted flag (never `Failed` by misparse).
+    ///
+    /// The real `CTRL+BREAK` + kill-fallback child behavior is proven in
+    /// `rwp-capture::command::tests::graceful_stop_behavior` against the fake
+    /// console child (`crates/rwp-system/examples/fake_ctrl_break_child.rs`).
+    /// This test covers the session tail of that same production path:
+    /// `collect_capture`'s cancellation branch parses with
+    /// `ParseMode::TolerateTruncatedTail` (`windows.rs::collect_capture`) and
+    /// returns `interrupted=true`, which `SessionRunner::run` forwards to
+    /// `build_report_with_stutter_analysis`. No timing is involved here, so
+    /// this test is deterministic by construction.
+    #[test]
+    fn truncated_tail_after_kill_parses_tolerantly_with_interrupted_flag()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use rwp_capture::{ParseMode, PresentMonCsvParser, PresentMonTarget};
+
+        let root = std::env::temp_dir().join(format!(
+            "rwp-interrupted-tail-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root)?;
+        let csv = root.join("run.csv");
+        let header = "Application,ProcessID,CPUStartQPC,FrameTime,CPUBusy,CPUWait,GPUTime,GPUBusy,GPUWait,DisplayLatency";
+        let complete_one = "Game.exe,42,1000,8.0,5.0,1.0,7.0,6.0,1.0,9.0";
+        let complete_two = "Game.exe,42,1100,8.0,5.0,1.0,7.0,6.0,1.0,9.0";
+        // Truncated tail: no newline, incomplete fields — exactly what a kill
+        // mid-flush leaves behind (see the `ignore` fake-child mode).
+        let truncated = "Game.exe,42,1200,8.0,5.0,1.0";
+        let mut contents = String::new();
+        contents.push_str(header);
+        contents.push('\n');
+        contents.push_str(complete_one);
+        contents.push('\n');
+        contents.push_str(complete_two);
+        contents.push('\n');
+        contents.push_str(truncated);
+        std::fs::write(&csv, contents.as_bytes())?;
+
+        let parser = PresentMonCsvParser::new(1_000_000)?;
+        let target = PresentMonTarget::ProcessId(42);
+        assert!(
+            parser.parse_path(&csv, &target).is_err(),
+            "truncated tail must fail strict parsing (the pre-AUD-03 Failed path)"
+        );
+        let capture =
+            parser.parse_path_with_mode(&csv, &target, ParseMode::TolerateTruncatedTail)?;
+        assert_eq!(
+            capture.frames.len(),
+            2,
+            "tolerant parse must retain the 2 complete rows and drop the truncated tail"
+        );
+
+        let document = rwp_report::CaptureDocument {
+            schema_version: String::from("rwp.capture.v1"),
+            frames: capture.frames,
+        };
+        let interrupted_report = rwp_report::build_report_with_stutter_analysis(
+            &document,
+            rwp_analysis::StatisticsConfig::default(),
+            rwp_report::StutterAnalysisConfig::V1(rwp_analysis::StutterConfig::default()),
+            true,
+        )?;
+        assert!(
+            interrupted_report.interrupted,
+            "interrupted captures must carry interrupted=true, never Failed"
+        );
+        let clean_report = rwp_report::build_report_with_stutter_analysis(
+            &document,
+            rwp_analysis::StatisticsConfig::default(),
+            rwp_report::StutterAnalysisConfig::V1(rwp_analysis::StutterConfig::default()),
+            false,
+        )?;
+        assert!(
+            !clean_report.interrupted,
+            "the interrupted flag must be explicit, not always-on"
+        );
+        let _ = std::fs::remove_dir_all(&root);
         Ok(())
     }
 }

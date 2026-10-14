@@ -24,6 +24,7 @@ Commands:
   doctor             Run local preflight diagnostics for RWP and an optional PresentMon executable
   calibrate          Calibrate A/A paired sessions and recommend an equivalence margin
   migrate            Migrate a legacy report or session to the current schema version
+  capture            Capture a live PresentMon session on Windows (same orchestration as the GUI)
   help               Print this message or the help of the given subcommand(s)
 
 Options:
@@ -146,6 +147,48 @@ Options:
       --output-dir <OUTPUT_DIR>  Destination directory for a migrated session
   -h, --help                     Print help
 ```
+
+## capture
+
+```text
+Capture a live PresentMon session on Windows (same orchestration as the GUI)
+
+Usage: rwp.exe capture [OPTIONS] --presentmon <PRESENTMON> --duration-seconds <DURATION_SECONDS> --output-dir <OUTPUT_DIR>
+
+Options:
+      --json
+          Emit machine-readable JSON for command failures
+      --presentmon <PRESENTMON>
+          Path to the PresentMon console executable
+      --process-id <PROCESS_ID>
+          Target process identifier (mutually exclusive with --process-name)
+      --process-name <PROCESS_NAME>
+          Target process executable name (mutually exclusive with --process-id)
+      --duration-seconds <DURATION_SECONDS>
+          Capture duration in seconds (1 through 3600)
+      --interval-ms <INTERVAL_MS>
+          Windows telemetry sampling interval in milliseconds (10 through 5000, default 50) [default: 50]
+      --no-process-probing
+          Disable RWP's additional process/thread telemetry probing
+      --stop-existing-session
+          Allow PresentMon to stop an existing trace session of the same name (also stops another tool's session; default off, use with consent)
+      --refresh-rate-hz <REFRESH_RATE_HZ>
+          Display refresh rate in Hz for refresh-aware stutter analysis (overrides auto-detect)
+      --output-dir <OUTPUT_DIR>
+          Destination session directory (same layout and manifest as the GUI)
+  -h, --help
+          Print help
+```
+
+> Note (hand-maintained, not generator output): the first Ctrl+C or
+> Ctrl+Break during `capture` stops PresentMon gracefully and persists the
+> partial session with `interrupted=true`, then exits 0 with the stderr
+> notice `interrupted: partial session saved at <dir>` (OWNER DECISION, see
+> `docs/cli-errors.md`). A second signal keeps default handling so the
+> process still ends; the kill-on-close Job Object prevents orphans either
+> way. Installing the console handler requires a console; without one the
+> command fails before spawning instead of capturing blind (UNVERIFIED on a
+> console-less CLI host).
 
 Failure taxonomy: `docs/cli-errors.md`. Troubleshooting walkthrough:
 `docs/troubleshooting.md`.

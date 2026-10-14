@@ -43,6 +43,12 @@ redacted JSON bundle safe to attach to a report.
 - **GUI "already running"**: stop or reset the active session first.
 - **GUI shows a failure**: the message line is followed by a `Fix:` hint
   from the same remediation table the CLI prints.
+- **Leftover PresentMon trace session** (for example after a killed stop —
+  a hard kill can leave the ETW session open): confirm with
+  `logman query -ets` in an elevated prompt; then either rerun with
+  `rwp capture --stop-existing-session` (stops another tool's session of the
+  same name too, so use it with consent) or stop that session directly with
+  `logman stop <name> -ets` before capturing again.
 
 ## Getting help
 

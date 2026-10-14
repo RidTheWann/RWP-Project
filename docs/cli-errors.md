@@ -39,6 +39,18 @@ so callers cannot bypass the limit by skipping the builder method.
 The upper bound is a configuration contract, not a claim about measurement accuracy or a
 benchmark result. Durations outside the supported range are rejected; they are not clamped.
 
+## Interrupted live captures
+
+A `capture` interrupted by Ctrl+C or Ctrl+Break is not a failure: the partial
+session persists with `interrupted=true` and the command exits 0 with the
+stderr notice `interrupted: partial session saved at <dir>`. No error code is
+emitted. This exit policy is an OWNER DECISION (default): the partial session
+is the successful product of an interrupted run. A second signal while a stop
+is already in progress keeps default handling so the process still ends; the
+kill-on-close Job Object prevents orphaned PresentMon processes either way.
+Installing the console handler requires a console: on a console-less host the
+command fails before spawning and surfaces as `RWP-E9000`.
+
 ## Privacy
 
 Error messages are intended to stay actionable without adding new telemetry or network behavior. Existing path-bearing lower-level errors may still contain local filesystem details; user-facing bundles must apply the same redaction policy as reports.

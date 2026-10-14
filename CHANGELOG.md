@@ -9,6 +9,12 @@ Entry format: one bullet per user-facing change under
 
 ## Unreleased
 
+### Added
+- Add `rwp capture` for live Windows capture (`--presentmon`, `--process-id`/`--process-name`, `--duration-seconds` 1–3600, `--interval-ms` 10–5000 default 50, `--no-process-probing`, `--refresh-rate-hz`, `--output-dir`): it runs the same session orchestration, persistence layout, and manifest as the GUI, reuses the kill-on-close Job Object so PresentMon never orphans on interrupt/crash, and returns `RWP-E5100` off Windows. The first Ctrl+C/Ctrl+Break stops PresentMon gracefully and persists the partial session with `interrupted=true` (exit 0 with an `interrupted: partial session saved at <dir>` stderr notice); a repeat signal still ends the process. `rwp capture` also accepts `--stop-existing-session` (default off, also stops another tool's session of the same name), and a killed stop prints an ETW-hygiene hint pointing at `logman query -ets` and the troubleshooting entry. Live PresentMon validation on reference hardware stays outstanding.
+
+### Fixed
+- Request a graceful PresentMon stop when cancelling from the console-less release GUI (attach-then-signal with no visible window) instead of always falling back to a hard kill; validated with a test helper only, real PresentMon behavior stays outstanding.
+
 ## [0.1.0-alpha] - 2026-10-12
 
 ### Added

@@ -27,6 +27,18 @@ use crate::{
 #[cfg(any(windows, test))]
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
+/// Win32 `CREATE_NO_WINDOW` creation flag: the child keeps a console (so a
+/// console-less parent can attach and signal) but no visible window appears.
+#[cfg(any(windows, test))]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Bounded wait for a graceful PresentMon stop before the kill fallback fires.
+///
+/// Documented contract, kept at two seconds: Batch 7 adds a smoke-test
+/// measurement step (`docs/acceptance/smoke-test.md`) so the owner can
+/// revisit the value with real-PresentMon data instead of changing it blind.
+pub const GRACEFUL_STOP_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Longest timed capture accepted, in seconds. Matches the native UI limit.
 pub const MAX_TIMED_SECONDS: u64 = 3600;
 
@@ -201,6 +213,20 @@ pub struct PresentMonProcess {
     stderr_reader: Option<std::thread::JoinHandle<std::io::Result<String>>>,
     #[cfg(windows)]
     _job: Option<rwp_system::PresentMonJob>,
+    /// Whether the child shares the caller's console, recorded at spawn.
+    /// Console-sharing children receive a direct process-group signal; children
+    /// of a console-less caller are signaled through attach-then-signal.
+    #[cfg(windows)]
+    shares_console: bool,
+}
+
+/// How a `terminate` request finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopOutcome {
+    /// The child exited before the kill fallback was needed.
+    Graceful,
+    /// The bounded wait expired and the kill fallback fired.
+    Killed,
 }
 
 impl PresentMonProcess {
@@ -229,7 +255,8 @@ impl PresentMonProcess {
 
     /// Requests a graceful PresentMon shutdown, falling back to process termination after a timeout.
     pub fn terminate(&mut self) -> Result<(), PresentMonCaptureError> {
-        self.terminate_gracefully(Duration::from_secs(2))
+        self.terminate_with_outcome(GRACEFUL_STOP_TIMEOUT)
+            .map(|_| ())
     }
 
     /// Requests CTRL+BREAK for the PresentMon process group and falls back to kill on timeout.
@@ -237,12 +264,43 @@ impl PresentMonProcess {
         &mut self,
         timeout: Duration,
     ) -> Result<(), PresentMonCaptureError> {
+        self.terminate_with_outcome(timeout).map(|_| ())
+    }
+
+    /// Stops the child like [`PresentMonProcess::terminate_gracefully`], and
+    /// additionally reports whether the kill fallback fired.
+    pub fn terminate_with_outcome(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<StopOutcome, PresentMonCaptureError> {
         #[cfg(windows)]
         {
+            if self
+                .child
+                .try_wait()
+                .map_err(PresentMonCaptureError::Wait)?
+                .is_some()
+            {
+                return Ok(StopOutcome::Graceful);
+            }
             let process_id = self.child.id();
-            if request_process_group_break(process_id).is_err() {
+            let delivered = if self.shares_console {
+                request_process_group_break(process_id).is_ok()
+            } else {
+                rwp_system::send_break_to_detached_group(process_id).is_ok()
+            };
+            if !delivered {
+                if self
+                    .child
+                    .try_wait()
+                    .map_err(PresentMonCaptureError::Wait)?
+                    .is_some()
+                {
+                    return Ok(StopOutcome::Graceful);
+                }
                 self.child.kill().map_err(PresentMonCaptureError::Kill)?;
-                return Ok(());
+                tracing::warn!(target: "rwp", event = "presentmon_kill_fallback");
+                return Ok(StopOutcome::Killed);
             }
             let deadline = Instant::now() + timeout;
             loop {
@@ -252,11 +310,12 @@ impl PresentMonProcess {
                     .map_err(PresentMonCaptureError::Wait)?
                     .is_some()
                 {
-                    return Ok(());
+                    return Ok(StopOutcome::Graceful);
                 }
                 if Instant::now() >= deadline {
                     self.child.kill().map_err(PresentMonCaptureError::Kill)?;
-                    return Ok(());
+                    tracing::warn!(target: "rwp", event = "presentmon_kill_fallback");
+                    return Ok(StopOutcome::Killed);
                 }
                 thread::sleep(Duration::from_millis(25));
             }
@@ -266,7 +325,30 @@ impl PresentMonProcess {
         {
             let _ = timeout;
             let _ = thread::sleep;
-            self.child.kill().map_err(PresentMonCaptureError::Kill)
+            self.child.kill().map_err(PresentMonCaptureError::Kill)?;
+            Ok(StopOutcome::Killed)
+        }
+    }
+
+    /// Wraps an already-spawned child for stop-path testing.
+    ///
+    /// Test support only: production children come from
+    /// [`PresentMonRunner::start`]. Console sharing is recorded with the same
+    /// production detector used at spawn, so the real signal path is exercised.
+    #[cfg(windows)]
+    #[doc(hidden)]
+    pub fn from_child_for_testing(
+        child: Child,
+        output_file: PathBuf,
+        target: PresentMonTarget,
+    ) -> Self {
+        Self {
+            child,
+            output_file,
+            target,
+            stderr_reader: None,
+            _job: None,
+            shares_console: rwp_system::caller_has_console(),
         }
     }
 
@@ -359,7 +441,7 @@ impl PresentMonRunner {
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+            command.creation_flags(presentmon_child_creation_flags());
         }
 
         let mut child = command
@@ -391,7 +473,25 @@ impl PresentMonRunner {
             stderr_reader,
             #[cfg(windows)]
             _job: job,
+            #[cfg(windows)]
+            shares_console: rwp_system::caller_has_console(),
         })
+    }
+}
+
+/// Creation flags for the PresentMon child console.
+///
+/// A caller with a console keeps exactly the historical flags, so the child
+/// shares that console and direct process-group delivery works. A console-less
+/// caller (release GUI, detached helpers) additionally passes
+/// `CREATE_NO_WINDOW`: the child keeps a console for attach-then-signal
+/// delivery but no visible window ever appears.
+#[cfg(windows)]
+pub fn presentmon_child_creation_flags() -> u32 {
+    if rwp_system::caller_has_console() {
+        CREATE_NEW_PROCESS_GROUP
+    } else {
+        CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
     }
 }
 
@@ -400,8 +500,8 @@ mod tests {
     use std::io::Cursor;
 
     use super::{
-        CREATE_NEW_PROCESS_GROUP, MAX_TIMED_SECONDS, PresentMonCaptureConfig, PresentMonRunner,
-        PresentMonTarget, read_bounded_lossy,
+        CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, MAX_TIMED_SECONDS, PresentMonCaptureConfig,
+        PresentMonRunner, PresentMonTarget, read_bounded_lossy,
     };
     #[cfg(unix)]
     use crate::csv::PresentMonCsvParser;
@@ -411,6 +511,13 @@ mod tests {
     fn process_group_flag_matches_the_win32_value() {
         // The production spawn path uses this documented Win32 creation flag.
         assert_eq!(CREATE_NEW_PROCESS_GROUP, 0x0000_0200);
+    }
+
+    #[test]
+    fn no_window_flag_matches_the_win32_value() {
+        // The no-console spawn path adds this documented Win32 creation flag
+        // so the child keeps a (hidden) console for attach-then-signal.
+        assert_eq!(CREATE_NO_WINDOW, 0x0800_0000);
     }
 
     #[test]
@@ -782,5 +889,512 @@ mod tests {
         process.wait()?;
         let _ = std::fs::remove_dir_all(&root);
         Ok(())
+    }
+
+    /// Windows-only behavioral proof for AUD-03 graceful stop.
+    ///
+    /// These tests exercise the REAL production stop path
+    /// (`PresentMonProcess::terminate_gracefully` -> `rwp_system::request_process_group_break`
+    /// -> bounded 2 s wait -> kill fallback, then `ParseMode::TolerateTruncatedTail`)
+    /// against a fake child console process built from this repo
+    /// (`crates/rwp-system/examples/fake_ctrl_break_child.rs`, no new dependencies,
+    /// never shipped in the installer or release artifacts).
+    ///
+    /// Timing rationale (anti-flake): the production bounded wait is 2 s. Tests use
+    /// generous outer bounds (ready poll up to 15 s at 50 ms steps; overall completion
+    /// up to 15 s; kill-fallback lower bound 1500 ms to allow 500 ms scheduling slack)
+    /// so a loaded machine cannot flake a pass into a fail. The lower bound only guards
+    /// that the kill fallback actually waited; the upper bounds guard hangs.
+    #[cfg(windows)]
+    mod graceful_stop_behavior {
+        use super::super::{CREATE_NEW_PROCESS_GROUP, GRACEFUL_STOP_TIMEOUT};
+        use crate::csv::{ParseMode, PresentMonCsvParser};
+        use crate::{PresentMonProcess, PresentMonTarget};
+        use std::path::PathBuf;
+        use std::time::{Duration, Instant};
+
+        fn fake_child_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+            let exe = std::env::current_exe()?;
+            let deps_dir = exe
+                .parent()
+                .ok_or("current test executable has no parent directory")?;
+            let profile_dir = deps_dir
+                .parent()
+                .ok_or("current test executable has no profile directory")?;
+            Ok(profile_dir
+                .join("examples")
+                .join("fake_ctrl_break_child.exe"))
+        }
+
+        fn wait_for_ready(ready: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                if ready.exists() {
+                    return Ok(());
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "fake child never signaled readiness at {}",
+                        ready.display()
+                    )
+                    .into());
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        fn spawn_fake_child(
+            helper: &std::path::Path,
+            mode: &str,
+            csv: &std::path::Path,
+            ready: &std::path::Path,
+        ) -> Result<std::process::Child, Box<dyn std::error::Error>> {
+            use std::os::windows::process::CommandExt;
+            use std::process::{Command, Stdio};
+            let child = Command::new(helper)
+                .arg("--mode")
+                .arg(mode)
+                .arg("--csv")
+                .arg(csv)
+                .arg("--ready")
+                .arg(ready)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NEW_PROCESS_GROUP)
+                .spawn()?;
+            Ok(child)
+        }
+
+        #[test]
+        fn graceful_break_flushes_final_row_and_exits_zero()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let root = std::env::temp_dir().join(format!(
+                "rwp-graceful-stop-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root)?;
+            let csv = root.join("run.csv");
+            let ready = root.join("ready");
+            let helper = fake_child_path()?;
+            if !helper.exists() {
+                return Err(format!(
+                    "fake child helper missing at {}; build it with: cargo build --locked -p rwp-system --examples",
+                    helper.display()
+                )
+                .into());
+            }
+            let child = spawn_fake_child(&helper, "graceful", &csv, &ready)?;
+            wait_for_ready(&ready)?;
+            let mut process = PresentMonProcess {
+                child,
+                output_file: csv.clone(),
+                target: PresentMonTarget::ProcessId(42),
+                stderr_reader: None,
+                _job: None,
+                shares_console: rwp_system::caller_has_console(),
+            };
+            let started = Instant::now();
+            process.terminate_gracefully(GRACEFUL_STOP_TIMEOUT)?;
+            let status = process.wait()?;
+            let elapsed = started.elapsed();
+            assert!(
+                status.success(),
+                "graceful fake child must exit 0, got {status:?}"
+            );
+            assert!(
+                elapsed < Duration::from_secs(15),
+                "graceful stop must complete within the generous 15 s bound, took {elapsed:?}"
+            );
+            let parser = PresentMonCsvParser::new(1_000_000)?;
+            let capture = parser.parse_path_with_mode(
+                &csv,
+                &PresentMonTarget::ProcessId(42),
+                ParseMode::TolerateTruncatedTail,
+            )?;
+            assert_eq!(
+                capture.frames.len(),
+                3,
+                "graceful child must flush header + 2 startup rows + 1 final row"
+            );
+            let _ = std::fs::remove_dir_all(&root);
+            Ok(())
+        }
+
+        #[test]
+        fn ignored_break_falls_back_to_kill_and_tolerates_tail()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let root = std::env::temp_dir().join(format!(
+                "rwp-kill-fallback-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root)?;
+            let csv = root.join("run.csv");
+            let ready = root.join("ready");
+            let helper = fake_child_path()?;
+            if !helper.exists() {
+                return Err(format!(
+                    "fake child helper missing at {}; build it with: cargo build --locked -p rwp-system --examples",
+                    helper.display()
+                )
+                .into());
+            }
+            let child = spawn_fake_child(&helper, "ignore", &csv, &ready)?;
+            wait_for_ready(&ready)?;
+            let mut process = PresentMonProcess {
+                child,
+                output_file: csv.clone(),
+                target: PresentMonTarget::ProcessId(42),
+                stderr_reader: None,
+                _job: None,
+                shares_console: rwp_system::caller_has_console(),
+            };
+            let started = Instant::now();
+            process.terminate_gracefully(GRACEFUL_STOP_TIMEOUT)?;
+            let status = process.wait()?;
+            let elapsed = started.elapsed();
+            assert!(
+                elapsed >= Duration::from_millis(1500),
+                "kill fallback must wait out the bounded 2 s wait (1500 ms lower bound allows scheduling slack), took {elapsed:?}"
+            );
+            assert!(
+                elapsed < Duration::from_secs(15),
+                "kill fallback must complete within the generous 15 s bound, took {elapsed:?}"
+            );
+            assert!(
+                !status.success(),
+                "killed fake child must not exit 0, got {status:?}"
+            );
+            let parser = PresentMonCsvParser::new(1_000_000)?;
+            assert!(
+                parser
+                    .parse_path(&csv, &PresentMonTarget::ProcessId(42))
+                    .is_err(),
+                "truncated tail after kill must fail strict parsing"
+            );
+            let capture = parser.parse_path_with_mode(
+                &csv,
+                &PresentMonTarget::ProcessId(42),
+                ParseMode::TolerateTruncatedTail,
+            )?;
+            assert_eq!(
+                capture.frames.len(),
+                2,
+                "tolerant parse after kill must retain the 2 complete rows and drop the truncated tail"
+            );
+            let _ = std::fs::remove_dir_all(&root);
+            Ok(())
+        }
+
+        /// AUD-03b: the same production stop path driven from a console-less
+        /// parent (release GUI shape).
+        ///
+        /// The test spawns `no_console_stop_driver` (this crate's examples)
+        /// with `DETACHED_PROCESS`, so the driver has no console exactly like
+        /// the GUI. The driver spawns the fake child with the production
+        /// spawn policy, stops it with `terminate_with_outcome` (production
+        /// 2 s bound), and reports a result file; the test only asserts on
+        /// that file, never on timing.
+        ///
+        /// Timing rationale (anti-flake): no assertion depends on elapsed
+        /// time. Generous deadlines only guard hangs — driver completion up
+        /// to 180 s (the driver bounds itself far below that), ready poll
+        /// inside the driver up to 15 s. Helpers are built by the workspace
+        /// gate before any test runs; package-selected runs pre-build them
+        /// once (see `stop_helper_paths`). A loaded machine slows the test
+        /// down but cannot flip a pass into a fail.
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+
+        struct NoConsoleDriverResult {
+            detected_no_console: bool,
+            outcome: String,
+            child_success: bool,
+            frames: usize,
+            strict_failed: bool,
+        }
+
+        fn example_binary(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+            let exe = std::env::current_exe()?;
+            let deps_dir = exe
+                .parent()
+                .ok_or("current test executable has no parent directory")?;
+            let profile_dir = deps_dir
+                .parent()
+                .ok_or("current test executable has no profile directory")?;
+            Ok(profile_dir.join("examples").join(name))
+        }
+
+        fn stop_helper_paths() -> Result<(PathBuf, PathBuf), Box<dyn std::error::Error>> {
+            // The workspace gate (`cargo test --workspace --all-features
+            // --locked`, the verification authority) builds every example
+            // before running any test — verified by deleting both helper
+            // binaries and watching `--no-run` rebuild them — so the helpers
+            // exist here. A nested `cargo build` from inside a test is
+            // deliberately NOT used: the outer run links example binaries
+            // concurrently, and two linkers on the same `.exe` fail with
+            // `LNK1104: cannot open file
+            // 'target\debug\examples\fake_ctrl_break_child.exe'` (observed
+            // twice under full-workspace runs). For package-selected runs,
+            // pre-build once with: `cargo build --locked --examples
+            // -p rwp-capture -p rwp-system`.
+            let driver = example_binary("no_console_stop_driver.exe")?;
+            let helper = example_binary("fake_ctrl_break_child.exe")?;
+            for (label, path) in [
+                ("no-console driver", &driver),
+                ("fake child helper", &helper),
+            ] {
+                if !path.exists() {
+                    return Err(format!(
+                        "{label} missing at {}; the workspace gate builds it automatically, otherwise pre-build once with: cargo build --locked --examples -p rwp-capture -p rwp-system",
+                        path.display()
+                    )
+                    .into());
+                }
+            }
+            Ok((driver, helper))
+        }
+
+        fn run_no_console_driver(
+            mode: &str,
+        ) -> Result<NoConsoleDriverResult, Box<dyn std::error::Error>> {
+            use std::os::windows::process::CommandExt;
+            use std::process::{Command, Stdio};
+
+            let (driver, helper) = stop_helper_paths()?;
+            let root = std::env::temp_dir().join(format!(
+                "rwp-no-console-{mode}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root)?;
+            let csv = root.join("run.csv");
+            let ready = root.join("ready");
+            let result_path = root.join("result.txt");
+            let driver_stdout = root.join("driver.stdout.txt");
+            let driver_stderr = root.join("driver.stderr.txt");
+            let stdout_file = std::fs::File::create(&driver_stdout)?;
+            let stderr_file = std::fs::File::create(&driver_stderr)?;
+            let mut driver_child = Command::new(&driver)
+                .arg("--helper")
+                .arg(&helper)
+                .arg("--mode")
+                .arg(mode)
+                .arg("--csv")
+                .arg(&csv)
+                .arg("--ready")
+                .arg(&ready)
+                .arg("--result")
+                .arg(&result_path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::from(stdout_file))
+                .stderr(Stdio::from(stderr_file))
+                .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+                .spawn()
+                .map_err(|error| format!("spawn no-console driver failed: {error}"))?;
+            let deadline = Instant::now() + Duration::from_secs(180);
+            let driver_status = loop {
+                let status = driver_child
+                    .try_wait()
+                    .map_err(|error| format!("poll no-console driver failed: {error}"))?;
+                match status {
+                    Some(status) => break status,
+                    None => {
+                        if Instant::now() >= deadline {
+                            let _ = driver_child.kill();
+                            return Err("no-console driver timed out after 180 s".into());
+                        }
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                }
+            };
+            if !driver_status.success() {
+                let stdout_tail = std::fs::read_to_string(&driver_stdout)
+                    .unwrap_or_else(|_| String::from("<unreadable>"));
+                let stderr_tail = std::fs::read_to_string(&driver_stderr)
+                    .unwrap_or_else(|_| String::from("<unreadable>"));
+                return Err(format!(
+                    "no-console driver exited {driver_status:?}; stdout: {stdout_tail}; stderr: {stderr_tail}"
+                )
+                .into());
+            }
+            let contents = std::fs::read_to_string(&result_path)
+                .map_err(|error| format!("read no-console driver result failed: {error}"))?;
+            let mut detected_no_console = false;
+            let mut outcome = String::new();
+            let mut child_success = false;
+            let mut frames = 0_usize;
+            let mut strict_failed = false;
+            for line in contents.lines() {
+                let (key, value) = line
+                    .split_once('=')
+                    .ok_or_else(|| format!("malformed driver result line: {line}"))?;
+                match key {
+                    "detected_no_console" => detected_no_console = value == "true",
+                    "outcome" => outcome = value.to_owned(),
+                    "child_success" => child_success = value == "true",
+                    "frames" => {
+                        frames = value
+                            .parse()
+                            .map_err(|_| format!("malformed frames value: {value}"))?;
+                    }
+                    "strict_failed" => strict_failed = value == "true",
+                    _ => {}
+                }
+            }
+            let _ = std::fs::remove_dir_all(&root);
+            Ok(NoConsoleDriverResult {
+                detected_no_console,
+                outcome,
+                child_success,
+                frames,
+                strict_failed,
+            })
+        }
+
+        #[test]
+        fn no_console_parent_graceful_stop() -> Result<(), Box<dyn std::error::Error>> {
+            let result = run_no_console_driver("graceful")?;
+            assert!(
+                result.detected_no_console,
+                "driver must observe no console, or this is not the GUI case"
+            );
+            assert_eq!(
+                result.outcome, "graceful",
+                "console-less graceful stop must not use the kill fallback"
+            );
+            assert_eq!(
+                result.frames, 3,
+                "console-less graceful stop must flush the final row"
+            );
+            assert!(
+                result.child_success,
+                "console-less graceful child must exit 0"
+            );
+            Ok(())
+        }
+
+        /// Console-stop handler probe (Ctrl+C work): a helper in its OWN process
+        /// group installs the production guard and the test delivers a real
+        /// CTRL+BREAK to that group (never CTRL+C, which cannot be targeted and
+        /// would hit the cargo terminal). Survival plus the result file proves
+        /// the signal was consumed; a second signal is covered by the pure
+        /// `decide_console_signal` matrix in rwp-system.
+        ///
+        /// Timing rationale (anti-flake): no assertion depends on elapsed
+        /// time. Deadlines only guard hangs — helper ready up to 15 s, helper
+        /// exit up to 60 s (the probe bounds itself at 30 s).
+        fn run_console_stop_probe() -> Result<bool, Box<dyn std::error::Error>> {
+            use std::os::windows::process::CommandExt;
+            use std::process::{Command, Stdio};
+
+            let probe = example_binary("console_stop_probe.exe")?;
+            if !probe.exists() {
+                return Err(format!(
+                    "console-stop probe missing at {}; the workspace gate builds it automatically, otherwise pre-build once with: cargo build --locked --examples -p rwp-capture",
+                    probe.display()
+                )
+                .into());
+            }
+            let root = std::env::temp_dir().join(format!(
+                "rwp-stop-probe-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root)?;
+            let ready = root.join("ready");
+            let result_path = root.join("result.txt");
+            let mut probe_child = Command::new(&probe)
+                .arg("--ready")
+                .arg(&ready)
+                .arg("--result")
+                .arg(&result_path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NEW_PROCESS_GROUP)
+                .spawn()
+                .map_err(|error| format!("spawn console-stop probe failed: {error}"))?;
+            wait_for_ready(&ready)?;
+            rwp_system::request_process_group_break(probe_child.id())
+                .map_err(|error| format!("deliver CTRL+BREAK to probe failed: {error}"))?;
+            let deadline = Instant::now() + Duration::from_secs(60);
+            let probe_status = loop {
+                let status = probe_child
+                    .try_wait()
+                    .map_err(|error| format!("poll console-stop probe failed: {error}"))?;
+                match status {
+                    Some(status) => break status,
+                    None => {
+                        if Instant::now() >= deadline {
+                            let _ = probe_child.kill();
+                            return Err("console-stop probe timed out after 60 s".into());
+                        }
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                }
+            };
+            if !probe_status.success() {
+                return Err(format!(
+                    "console-stop probe exited {probe_status:?} without consuming the signal"
+                )
+                .into());
+            }
+            let contents = std::fs::read_to_string(&result_path)
+                .map_err(|error| format!("read console-stop probe result failed: {error}"))?;
+            let stopping = contents.lines().any(|line| line == "stopping=true");
+            let _ = std::fs::remove_dir_all(&root);
+            Ok(stopping)
+        }
+
+        #[test]
+        fn console_break_sets_the_shared_stop_flag() -> Result<(), Box<dyn std::error::Error>> {
+            assert!(
+                run_console_stop_probe()?,
+                "a delivered CTRL+BREAK must flip the shared stop flag"
+            );
+            Ok(())
+        }
+
+        #[test]
+        fn no_console_parent_ignored_break_killed_and_tolerated()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let result = run_no_console_driver("ignore")?;
+            assert!(
+                result.detected_no_console,
+                "driver must observe no console, or this is not the GUI case"
+            );
+            assert_eq!(
+                result.outcome, "killed",
+                "an ignoring child must take the kill fallback after the bounded wait"
+            );
+            assert!(
+                result.strict_failed,
+                "truncated tail after kill must fail strict parsing"
+            );
+            assert_eq!(
+                result.frames, 2,
+                "tolerant parse after kill must retain the 2 complete rows"
+            );
+            assert!(!result.child_success, "killed child must not exit 0");
+            Ok(())
+        }
     }
 }

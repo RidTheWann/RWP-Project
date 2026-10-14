@@ -1,5 +1,12 @@
 //! Windows hardware and system telemetry boundary.
 
+mod console_stop;
+
+pub use console_stop::{
+    CTRL_BREAK_EVENT_CODE, CTRL_C_EVENT_CODE, CTRL_CLOSE_EVENT_CODE, CTRL_LOGOFF_EVENT_CODE,
+    CTRL_SHUTDOWN_EVENT_CODE, decide_console_signal,
+};
+
 #[cfg(windows)]
 mod pdh;
 
@@ -14,11 +21,12 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
-    AuthenticodeStatus, DisplayRefreshRate, DisplayRefreshRateError, PresentMonJob,
-    PresentMonJobError, PresentMonPermissionError, PresentMonVersion, PresentMonVersionError,
-    QpcTimebase, SystemTelemetryError, WindowsSystemSampler, detect_presentmon_version,
+    AuthenticodeStatus, ConsoleStopGuard, DetachedBreakError, DisplayRefreshRate,
+    DisplayRefreshRateError, PresentMonJob, PresentMonJobError, PresentMonPermissionError,
+    PresentMonVersion, PresentMonVersionError, QpcTimebase, SystemTelemetryError,
+    WindowsSystemSampler, caller_has_console, capture_stop_flag, detect_presentmon_version,
     detect_process_display_refresh_rate, preflight_presentmon_permissions,
-    request_process_group_break, verify_presentmon_authenticode,
+    request_process_group_break, send_break_to_detached_group, verify_presentmon_authenticode,
 };
 
 #[cfg(windows)]

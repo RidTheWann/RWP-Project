@@ -153,6 +153,37 @@ enum Command {
         #[arg(long)]
         output_dir: Option<PathBuf>,
     },
+    /// Capture a live PresentMon session on Windows (same orchestration as the GUI).
+    Capture {
+        /// Path to the PresentMon console executable.
+        #[arg(long)]
+        presentmon: PathBuf,
+        /// Target process identifier (mutually exclusive with --process-name).
+        #[arg(long, conflicts_with = "process_name")]
+        process_id: Option<u32>,
+        /// Target process executable name (mutually exclusive with --process-id).
+        #[arg(long, conflicts_with = "process_id")]
+        process_name: Option<String>,
+        /// Capture duration in seconds (1 through 3600).
+        #[arg(long)]
+        duration_seconds: u64,
+        /// Windows telemetry sampling interval in milliseconds (10 through 5000, default 50).
+        #[arg(long, default_value_t = 50)]
+        interval_ms: u64,
+        /// Disable RWP's additional process/thread telemetry probing.
+        #[arg(long)]
+        no_process_probing: bool,
+        /// Allow PresentMon to stop an existing trace session of the same name
+        /// (also stops another tool's session; default off, use with consent).
+        #[arg(long)]
+        stop_existing_session: bool,
+        /// Display refresh rate in Hz for refresh-aware stutter analysis (overrides auto-detect).
+        #[arg(long)]
+        refresh_rate_hz: Option<f64>,
+        /// Destination session directory (same layout and manifest as the GUI).
+        #[arg(long)]
+        output_dir: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -234,6 +265,27 @@ fn run(command: Command) -> Result<()> {
             output,
             output_dir,
         } => migrate(report, session, output, output_dir),
+        Command::Capture {
+            presentmon,
+            process_id,
+            process_name,
+            duration_seconds,
+            interval_ms,
+            no_process_probing,
+            stop_existing_session,
+            refresh_rate_hz,
+            output_dir,
+        } => run_capture(
+            presentmon,
+            process_id,
+            process_name,
+            duration_seconds,
+            interval_ms,
+            no_process_probing,
+            stop_existing_session,
+            refresh_rate_hz,
+            output_dir,
+        ),
     }
 }
 
@@ -249,6 +301,222 @@ fn doctor(presentmon: Option<PathBuf>, bundle: Option<PathBuf>) -> Result<()> {
         return Err(anyhow::Error::new(DoctorPreflightFailed));
     }
     Ok(())
+}
+
+/// Target selector for `rwp capture` after mutual-exclusion validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CaptureTarget {
+    /// Capture by process identifier.
+    Pid(u32),
+    /// Capture by executable name (resolved to a PID via the live process list).
+    Name(String),
+}
+
+/// Validates a live-capture duration by calling rwp-capture's existing timed
+/// validation on a throwaway config, so the bound and the error variants stay
+/// single-sourced (the dummy target never spawns). Failures classify as
+/// `RWP-E2000` through the existing taxonomy.
+fn validate_capture_duration(seconds: u64) -> Result<()> {
+    rwp_capture::PresentMonCaptureConfig::new(
+        "PresentMon.exe",
+        "run.csv",
+        rwp_capture::PresentMonTarget::ProcessId(1),
+    )?
+    .with_timed_seconds(seconds)?;
+    Ok(())
+}
+
+/// Validates a live-capture sampling interval against the shared 10 ms–5 s
+/// session bound (`rwp_session` `SessionConfig::with_sample_interval`; the GUI
+/// enforces the same range and the default stays 50 ms).
+fn validate_capture_interval_ms(interval_ms: u64) -> Result<()> {
+    if !(10..=5000).contains(&interval_ms) {
+        bail!("interval_ms must be between 10 and 5000 milliseconds");
+    }
+    Ok(())
+}
+
+/// Validates the mutually exclusive `--process-id` / `--process-name`
+/// selectors without touching the live process list.
+fn resolve_capture_target(
+    process_id: Option<u32>,
+    process_name: Option<String>,
+) -> Result<CaptureTarget> {
+    match (process_id, process_name) {
+        (Some(_), Some(_)) => bail!("--process-id and --process-name are mutually exclusive"),
+        (None, None) => bail!("one of --process-id or --process-name is required"),
+        (Some(0), _) => bail!("process_id must be greater than zero"),
+        (Some(pid), None) => Ok(CaptureTarget::Pid(pid)),
+        (None, Some(name)) if name.trim().is_empty() => {
+            bail!("process_name must not be empty")
+        }
+        (None, Some(name)) => Ok(CaptureTarget::Name(name)),
+    }
+}
+
+#[cfg(not(windows))]
+#[allow(clippy::too_many_arguments)]
+fn run_capture(
+    _presentmon: PathBuf,
+    _process_id: Option<u32>,
+    _process_name: Option<String>,
+    _duration_seconds: u64,
+    _interval_ms: u64,
+    _no_process_probing: bool,
+    _stop_existing_session: bool,
+    _refresh_rate_hz: Option<f64>,
+    _output_dir: PathBuf,
+) -> Result<()> {
+    Err(rwp_session::SessionError::UnsupportedPlatform.into())
+}
+
+#[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
+fn run_capture(
+    presentmon: PathBuf,
+    process_id: Option<u32>,
+    process_name: Option<String>,
+    duration_seconds: u64,
+    interval_ms: u64,
+    no_process_probing: bool,
+    stop_existing_session: bool,
+    refresh_rate_hz: Option<f64>,
+    output_dir: PathBuf,
+) -> Result<()> {
+    use std::time::Duration;
+
+    validate_capture_duration(duration_seconds)?;
+    validate_capture_interval_ms(interval_ms)?;
+    let target = resolve_capture_target(process_id, process_name)?;
+    if let Some(hz) = refresh_rate_hz {
+        RefreshAwareStutterConfig::new(hz)
+            .with_context(|| "refresh_rate_hz must be finite and greater than zero")?;
+    }
+    let pid = match target {
+        CaptureTarget::Pid(pid) => pid,
+        CaptureTarget::Name(name) => resolve_process_name_to_pid(name.as_str())?,
+    };
+    let temp_csv = live_capture_temp_csv()?;
+    let session_dir = output_dir.clone();
+    let mut config =
+        rwp_session::SessionConfig::new(presentmon, temp_csv.clone(), pid, duration_seconds)?
+            .with_sample_interval(Duration::from_millis(interval_ms))?
+            .with_no_process_probing(no_process_probing)
+            .with_stop_existing_session(stop_existing_session)
+            .with_persistence_dir(output_dir);
+    if let Some(hz) = refresh_rate_hz {
+        config = config.with_display_refresh_rate_hz(hz)?;
+    }
+    // Safety: PresentMon runs in its own process group (CREATE_NEW_PROCESS_GROUP,
+    // plus CREATE_NO_WINDOW when the caller has no console), so console Ctrl+C
+    // never reaches it directly. The shared PresentMonRunner assigns the child
+    // to a KILL_ON_JOB_CLOSE Job Object (rwp_system::PresentMonJob via
+    // rwp-capture), so a second signal or a crash still closes the job handle
+    // and the OS terminates PresentMon — no orphan, no duplicated unsafe code.
+    // The first Ctrl+C/Ctrl+Break flips the shared stop flag below, the runner
+    // stops PresentMon gracefully (Batch 5 path), and the partial session
+    // persists with interrupted=true.
+    let _stop_guard = rwp_system::ConsoleStopGuard::install()
+        .with_context(|| "failed to install console stop handler for Ctrl+C")?;
+    let result = run_capture_session(
+        &config,
+        temp_csv.as_path(),
+        rwp_system::capture_stop_flag(),
+        |session_config, cancellation| rwp_session::SessionRunner.run(session_config, cancellation),
+    )?;
+    if let Some(notice) = capture_completion_notice(result.report.interrupted, &session_dir) {
+        eprintln!("{notice}");
+    }
+    if let Some(hint) = etw_kill_hint_for_outcome(result.stop_outcome) {
+        eprintln!("{hint}");
+    }
+    Ok(())
+}
+
+/// Runs one live session through an injected runner and removes the temporary
+/// PresentMon CSV afterwards, on success and on failure alike.
+///
+/// This is the minimum CLI-level seam for live capture: production passes the
+/// shared `SessionRunner`, while tests inject a fake that persists fixture
+/// data without PresentMon. No `rwp-session` API change was needed.
+#[cfg(windows)]
+fn run_capture_session(
+    config: &rwp_session::SessionConfig,
+    temp_csv: &std::path::Path,
+    cancellation: &std::sync::atomic::AtomicBool,
+    runner: impl FnOnce(
+        &rwp_session::SessionConfig,
+        &std::sync::atomic::AtomicBool,
+    ) -> Result<rwp_session::SessionResult, rwp_session::SessionError>,
+) -> Result<rwp_session::SessionResult> {
+    let result = runner(config, cancellation);
+    let _ = std::fs::remove_file(temp_csv);
+    result.map_err(anyhow::Error::from)
+}
+
+/// Renders the post-capture notice for an interrupted session, if any.
+///
+/// Exit-code policy (OWNER DECISION, default): an interrupted capture still
+/// exits 0 — the partial session is the successful product — with this
+/// stderr notice naming where it was saved.
+fn capture_completion_notice(interrupted: bool, session_dir: &std::path::Path) -> Option<String> {
+    interrupted.then(|| {
+        format!(
+            "interrupted: partial session saved at {}",
+            session_dir.display()
+        )
+    })
+}
+
+/// Renders the ETW-hygiene hint for a killed stop, if any.
+///
+/// A hard kill can leave a PresentMon trace session open; the hint tells the
+/// operator how to check and what rerun flag clears it. Graceful stops, and
+/// sessions that never went through the stop path, carry no hint. Pure across
+/// platforms so the matrix is unit-tested everywhere.
+fn etw_kill_hint_for_outcome(outcome: Option<rwp_capture::StopOutcome>) -> Option<&'static str> {
+    match outcome {
+        Some(rwp_capture::StopOutcome::Killed) => Some(
+            "note: PresentMon was killed rather than stopped gracefully; if `logman query -ets` shows a leftover PresentMon trace session, rerun with --stop-existing-session (see docs/troubleshooting.md)",
+        ),
+        Some(rwp_capture::StopOutcome::Graceful) | None => None,
+    }
+}
+
+#[cfg(windows)]
+fn live_capture_temp_csv() -> Result<PathBuf> {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let path = std::env::temp_dir().join(format!("rwp-capture-{}-{nanos}.csv", std::process::id()));
+    if path.exists() {
+        bail!("temporary capture CSV already exists: {}", path.display());
+    }
+    Ok(path)
+}
+
+#[cfg(windows)]
+fn resolve_process_name_to_pid(name: &str) -> Result<u32> {
+    let wanted = name.trim();
+    let mut pids: Vec<u32> = Vec::new();
+    for summary in rwp_system::list_processes()? {
+        if summary.name.eq_ignore_ascii_case(wanted) {
+            pids.push(summary.process_id);
+        }
+    }
+    pids.sort_unstable();
+    pids.dedup();
+    match pids.len() {
+        0 => bail!("no live process named '{wanted}' was found"),
+        1 => match pids.first() {
+            Some(pid) => Ok(*pid),
+            None => bail!("no live process named '{wanted}' was found"),
+        },
+        _ => {
+            bail!("multiple live processes named '{wanted}' were found; pass --process-id instead")
+        }
+    }
 }
 
 // Selects the stutter detector from persisted provenance: a recorded display
@@ -1382,5 +1650,355 @@ mod tests {
     #[test]
     fn migrate_requires_exactly_one_source() {
         assert!(super::migrate(None, None, None, None).is_err());
+    }
+
+    #[test]
+    fn parses_capture_with_process_id() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from([
+            "rwp",
+            "capture",
+            "--presentmon",
+            r"C:\Tools\PresentMon.exe",
+            "--process-id",
+            "42",
+            "--duration-seconds",
+            "10",
+            "--output-dir",
+            "sessions/live",
+        ])?;
+        assert!(matches!(cli.command, super::Command::Capture { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn parses_capture_with_process_name_and_options() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from([
+            "rwp",
+            "capture",
+            "--presentmon",
+            r"C:\Tools\PresentMon.exe",
+            "--process-name",
+            "Game.exe",
+            "--duration-seconds",
+            "60",
+            "--interval-ms",
+            "50",
+            "--no-process-probing",
+            "--output-dir",
+            "sessions/live",
+        ])?;
+        assert!(matches!(cli.command, super::Command::Capture { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn parses_capture_stop_existing_session() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from([
+            "rwp",
+            "capture",
+            "--presentmon",
+            r"C:\Tools\PresentMon.exe",
+            "--process-id",
+            "42",
+            "--duration-seconds",
+            "10",
+            "--stop-existing-session",
+            "--output-dir",
+            "sessions/live",
+        ])?;
+        assert!(matches!(
+            cli.command,
+            super::Command::Capture {
+                stop_existing_session: true,
+                ..
+            }
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn capture_rejects_both_process_selectors() {
+        let result = Cli::try_parse_from([
+            "rwp",
+            "capture",
+            "--presentmon",
+            r"C:\Tools\PresentMon.exe",
+            "--process-id",
+            "42",
+            "--process-name",
+            "Game.exe",
+            "--duration-seconds",
+            "10",
+            "--output-dir",
+            "sessions/live",
+        ]);
+        assert!(result.is_err(), "PID and name are mutually exclusive");
+    }
+
+    #[test]
+    fn capture_validation_rejects_bad_durations_and_intervals() {
+        assert!(super::validate_capture_duration(0).is_err());
+        assert!(super::validate_capture_duration(3601).is_err());
+        assert!(super::validate_capture_duration(10).is_ok());
+        assert!(super::validate_capture_interval_ms(9).is_err());
+        assert!(super::validate_capture_interval_ms(5001).is_err());
+        assert!(super::validate_capture_interval_ms(50).is_ok());
+    }
+
+    #[test]
+    fn capture_validation_rejects_empty_selectors() {
+        assert!(super::resolve_capture_target(None, None).is_err());
+        assert!(super::resolve_capture_target(Some(0), None).is_err());
+        assert!(super::resolve_capture_target(Some(42), None).is_ok());
+        assert!(super::resolve_capture_target(None, Some(String::new())).is_err());
+        assert!(super::resolve_capture_target(None, Some(String::from("Game.exe"))).is_ok());
+        assert!(super::resolve_capture_target(Some(42), Some(String::from("Game.exe"))).is_err());
+    }
+
+    #[test]
+    fn session_errors_map_to_live_platform_code() {
+        // Pure taxonomy mapping, testable on every platform: the Windows
+        // builder exercises the invalid-configuration arm, other platforms
+        // the unsupported-platform arm; both must stay RWP-E5100/exit 51.
+        #[cfg(windows)]
+        let error = anyhow::Error::from(rwp_session::SessionError::InvalidConfiguration("probe"));
+        #[cfg(not(windows))]
+        let error = anyhow::Error::from(rwp_session::SessionError::UnsupportedPlatform);
+        let report = super::classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E5100");
+        assert_eq!(report.descriptor.exit_code, 51);
+    }
+
+    #[test]
+    fn etw_hint_appears_only_for_killed_stops() -> Result<(), Box<dyn std::error::Error>> {
+        let hint = super::etw_kill_hint_for_outcome(Some(rwp_capture::StopOutcome::Killed))
+            .ok_or("a killed stop must carry the ETW-hygiene hint")?;
+        assert!(hint.contains("logman query -ets"));
+        assert!(hint.contains("--stop-existing-session"));
+        assert_eq!(
+            super::etw_kill_hint_for_outcome(Some(rwp_capture::StopOutcome::Graceful)),
+            None
+        );
+        assert_eq!(super::etw_kill_hint_for_outcome(None), None);
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_capture_keeps_exit_zero_with_partial_notice() {
+        let dir = std::path::PathBuf::from("sessions/live");
+        assert_eq!(
+            super::capture_completion_notice(true, &dir),
+            Some(String::from(
+                "interrupted: partial session saved at sessions/live"
+            ))
+        );
+        assert_eq!(super::capture_completion_notice(false, &dir), None);
+    }
+
+    #[cfg(windows)]
+    fn seam_fixture_session(
+        root: &std::path::Path,
+        name: &str,
+        interrupted: bool,
+    ) -> Result<(std::path::PathBuf, rwp_session::SessionResult), Box<dyn std::error::Error>> {
+        use rwp_analysis::{StatisticsConfig, StutterConfig};
+        let frames = vec![
+            rwp_core::FrameSample::new(0, 8.0)?,
+            rwp_core::FrameSample::new(8_000_000, 8.1)?,
+        ];
+        let document = rwp_report::CaptureDocument {
+            schema_version: String::from("rwp.capture.v1"),
+            frames,
+        };
+        let report = rwp_report::build_report_with_stutter_analysis(
+            &document,
+            StatisticsConfig::default(),
+            rwp_report::StutterAnalysisConfig::V1(StutterConfig::default()),
+            interrupted,
+        )?;
+        let diagnostics =
+            rwp_diagnostics::DiagnosticEngine::new(rwp_diagnostics::RuleThresholds::default())
+                .diagnose(rwp_diagnostics::DiagnosisInput {
+                    statistics: &report.frame_statistics,
+                    frames: &document.frames,
+                    stutters: &report.stutter_events,
+                    system_samples: &[],
+                })?;
+        let report = rwp_report::with_diagnostics(report, diagnostics.clone());
+        let coverage = rwp_session::CoverageSummary {
+            frame_seconds: None,
+            telemetry_seconds: None,
+            intersection_seconds: None,
+        };
+        let source_csv = root.join("source.csv");
+        std::fs::write(&source_csv, b"seam-source")?;
+        let session_dir = root.join(name);
+        let frame_type_counts: Vec<(String, usize)> = Vec::new();
+        let input = rwp_session::PersistedSessionInput {
+            process_id: 42,
+            application: "SeamGame.exe",
+            interrupted,
+            display_refresh_rate_hz: None,
+            dominant_swap_chain_address: None,
+            discarded_frame_count: 0,
+            frame_type_counts: &frame_type_counts,
+            telemetry_warning_count: 0,
+            coverage: &coverage,
+            capture: &document,
+            report: &report,
+            system_samples: &[],
+            source_csv: &source_csv,
+            provenance: rwp_session::SessionProvenance {
+                rwp_version: String::from("0.1.0-test"),
+                git_sha: None,
+                build_target: None,
+                build_profile: None,
+                os: None,
+                cpu: None,
+                gpu: None,
+                driver: None,
+                presentmon_version: None,
+                presentmon_sha256: None,
+                qpc_frequency_hz: None,
+                sample_interval_ms: None,
+                exclude_dropped: None,
+                stop_existing_session: None,
+                no_process_probing: None,
+            },
+        };
+        rwp_session::persist_session(&session_dir, &input)?;
+        rwp_session::verify_manifest(&session_dir)?;
+        let result = rwp_session::SessionResult {
+            process_id: 42,
+            display_refresh_rate: None,
+            display_refresh_warning: None,
+            dominant_swap_chain_address: None,
+            discarded_frame_count: 0,
+            frame_type_counts: Vec::new(),
+            application: String::from("SeamGame.exe"),
+            system_samples: Vec::new(),
+            report,
+            telemetry_warnings: Vec::new(),
+            diagnostics,
+            coverage,
+            stop_outcome: interrupted.then_some(rwp_capture::StopOutcome::Killed),
+        };
+        Ok((session_dir, result))
+    }
+
+    #[cfg(windows)]
+    fn seam_validation_root(name: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!(
+            "rwp-cli-capture-seam-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root)?;
+        Ok(root)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_seam_persists_session_with_manifest() -> Result<(), Box<dyn std::error::Error>> {
+        let root = seam_validation_root("persist")?;
+        let (session_dir, result) = seam_fixture_session(&root, "seam", false)?;
+        let config =
+            rwp_session::SessionConfig::new("PresentMon.exe", root.join("temporary.csv"), 42, 10)?;
+        let temp_csv = root.join("temporary.csv");
+        std::fs::write(&temp_csv, b"temporary")?;
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let outcome =
+            super::run_capture_session(&config, &temp_csv, &cancellation, |_, _| Ok(result))?;
+        assert!(!outcome.report.interrupted);
+        assert!(
+            !temp_csv.exists(),
+            "the seam removes the temporary CSV on success"
+        );
+        let manifest_bytes = std::fs::read(session_dir.join("manifest.json"))?;
+        let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes)?;
+        assert_eq!(manifest["process_id"], 42);
+        assert_eq!(manifest["application"], "SeamGame.exe");
+        assert_eq!(manifest["interrupted"], false);
+        rwp_session::verify_manifest(&session_dir)?;
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_seam_interrupted_result_reports_partial_notice()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = seam_validation_root("interrupted")?;
+        let (session_dir, result) = seam_fixture_session(&root, "seam", true)?;
+        let config =
+            rwp_session::SessionConfig::new("PresentMon.exe", root.join("temporary.csv"), 42, 10)?;
+        let temp_csv = root.join("temporary.csv");
+        std::fs::write(&temp_csv, b"temporary")?;
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let outcome =
+            super::run_capture_session(&config, &temp_csv, &cancellation, |_, _| Ok(result))?;
+        assert!(outcome.report.interrupted);
+        let notice = super::capture_completion_notice(true, &session_dir)
+            .ok_or("an interrupted capture must produce the partial-session notice")?;
+        assert_eq!(
+            notice,
+            format!(
+                "interrupted: partial session saved at {}",
+                session_dir.display()
+            )
+        );
+        let manifest_bytes = std::fs::read(session_dir.join("manifest.json"))?;
+        let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes)?;
+        assert_eq!(manifest["interrupted"], true);
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_seam_propagates_runner_errors_and_cleans_temp()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = seam_validation_root("error")?;
+        let config =
+            rwp_session::SessionConfig::new("PresentMon.exe", root.join("temporary.csv"), 42, 10)?;
+        let temp_csv = root.join("temporary.csv");
+        std::fs::write(&temp_csv, b"temporary")?;
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let error = super::run_capture_session(&config, &temp_csv, &cancellation, |_, _| {
+            Err(rwp_session::SessionError::InvalidConfiguration("injected"))
+        })
+        .err()
+        .ok_or("runner errors must propagate through the seam")?;
+        assert!(
+            !temp_csv.exists(),
+            "the seam removes the temporary CSV on failure too"
+        );
+        let report = super::classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E5100");
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn capture_on_unsupported_platform_uses_stable_machine_code() {
+        let result = super::run_capture(
+            std::path::PathBuf::from("PresentMon.exe"),
+            None,
+            None,
+            10,
+            50,
+            false,
+            false,
+            None,
+            std::path::PathBuf::from("sessions/live"),
+        );
+        let error = match result {
+            Ok(()) => panic!("capture must fail off Windows"),
+            Err(error) => error,
+        };
+        let report = super::classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E5100");
+        assert_eq!(report.descriptor.exit_code, 51);
     }
 }
