@@ -69,6 +69,27 @@ Event rate is derived from the capture frame timestamp span. Missing or zero-dur
 
 The minimum event count prevents a single isolated stutter from being promoted solely because a short capture would make its per-minute rate appear large.
 
+## Stability — stability.v1
+
+The rule emits the all-clear verdict the instant-stability notification keys
+on. It fires only when all three hold:
+
+- At least `minimum_frame_samples` frame observations (default 60). Below the
+  bound the rule stays silent and the engine falls back to
+  `unknown.insufficient_evidence.v1`: Stable is never reported on
+  under-powered evidence, even if the rule is evaluated directly.
+- Zero stutter events. Any stutter evidence short-circuits to no verdict.
+- First-half vs second-half mean frame-time drift within
+  `stability_margin_percent` (default 1.0%, the shared A/A equivalence
+  margin — one system-wide margin, documented once here).
+
+The rule emits two supporting evidence items (`stability.no_stutter_events`
+and `stability.drift_within_margin`, weight 35 each, activation score 60)
+with rule id `stability.v1`, and records the active thresholds plus observed
+counts in its provenance parameters. It synthesizes no refresh rate and
+writes nothing to sessions itself; the persisted verdict is an ordinary
+engine diagnostic like any other rule.
+
 The rule emits separate event-rate and tail-ratio evidence with rule id frame_pacing.v2.
 
 ## Data-availability contract

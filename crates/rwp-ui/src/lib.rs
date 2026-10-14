@@ -278,6 +278,7 @@ fn diagnostic_category_label(category: DiagnosticCategory) -> String {
         DiagnosticCategory::VramPressure => "VRAM pressure",
         DiagnosticCategory::BackgroundInterference => "Background interference",
         DiagnosticCategory::StreamingOverhead => "Streaming overhead",
+        DiagnosticCategory::Stable => "Stable",
         DiagnosticCategory::Unknown => "Unknown",
         _ => "Unknown",
     };

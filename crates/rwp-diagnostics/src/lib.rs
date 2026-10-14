@@ -41,6 +41,9 @@ pub struct RuleThresholds {
     pub frame_pacing_min_events_per_minute: f64,
     /// Minimum heuristic score required to emit a non-Unknown diagnosis.
     pub activation_score: u8,
+    /// Split-half mean frame-time drift, in percent, within which a stutter-free
+    /// capture counts as stable. Defaults to the shared A/A equivalence margin.
+    pub stability_margin_percent: f64,
 }
 
 impl Default for RuleThresholds {
@@ -62,6 +65,7 @@ impl Default for RuleThresholds {
             frame_pacing_min_stutter_events: 3,
             frame_pacing_min_events_per_minute: 6.0,
             activation_score: 60,
+            stability_margin_percent: 1.0,
         }
     }
 }
@@ -109,6 +113,9 @@ impl DiagnosticEngine {
                 diagnostics.push(diagnostic);
             }
             if let Some(diagnostic) = self.evaluate_frame_pacing(&input)? {
+                diagnostics.push(diagnostic);
+            }
+            if let Some(diagnostic) = self.evaluate_stability(&input)? {
                 diagnostics.push(diagnostic);
             }
             if input.system_samples.len() >= self.thresholds.minimum_system_samples {
@@ -271,6 +278,54 @@ impl DiagnosticEngine {
         make_diagnostic(
             DiagnosticCategory::FramePacing,
             "frame_pacing.v2",
+            support,
+            Vec::new(),
+            self.thresholds,
+            input.frames.len(),
+            self.thresholds.minimum_frame_samples,
+        )
+    }
+
+    fn evaluate_stability(
+        &self,
+        input: &DiagnosisInput<'_>,
+    ) -> Result<Option<Diagnostic>, DiagnosticError> {
+        // Belt and suspenders with the engine-level minimum gate above: this
+        // rule never reports Stable on under-powered observations, even when
+        // called directly. It reuses the preliminary core, so the in-memory
+        // banner and the persisted rule cannot disagree.
+        if input.frames.len() < self.thresholds.minimum_frame_samples {
+            return Ok(None);
+        }
+        if preliminary_stability(
+            input.frames,
+            input.stutters.len(),
+            self.thresholds.minimum_frame_samples,
+            self.thresholds.stability_margin_percent,
+        ) != PreliminaryStability::Stable
+        {
+            return Ok(None);
+        }
+        let mut support = Vec::new();
+        support.push(supporting(
+            "stability.no_stutter_events",
+            35,
+            format!(
+                "No stutter events across {} frame observations",
+                input.frames.len()
+            ),
+        ));
+        support.push(supporting(
+            "stability.drift_within_margin",
+            35,
+            format!(
+                "Split-half mean frame-time drift within {}%",
+                self.thresholds.stability_margin_percent
+            ),
+        ));
+        make_diagnostic(
+            DiagnosticCategory::Stable,
+            "stability.v1",
             support,
             Vec::new(),
             self.thresholds,
@@ -695,6 +750,14 @@ fn validate_thresholds(thresholds: RuleThresholds) -> Result<(), DiagnosticError
     if thresholds.activation_score == 0 || thresholds.activation_score > 100 {
         return Err(DiagnosticError::InvalidThreshold("activation_score"));
     }
+    if !(0.0..=100.0).contains(&thresholds.stability_margin_percent)
+        || thresholds.stability_margin_percent <= 0.0
+        || !thresholds.stability_margin_percent.is_finite()
+    {
+        return Err(DiagnosticError::InvalidThreshold(
+            "stability_margin_percent",
+        ));
+    }
     Ok(())
 }
 
@@ -917,10 +980,16 @@ fn threshold_parameters(thresholds: RuleThresholds) -> Vec<(String, String)> {
             String::from("activation_score"),
             thresholds.activation_score.to_string(),
         ),
+        (
+            String::from("stability_margin_percent"),
+            thresholds.stability_margin_percent.to_string(),
+        ),
     ]
 }
 
 fn category_rank(category: DiagnosticCategory) -> u8 {
+    // Actionable findings sort before the inconclusive verdict, and the
+    // confirmed all-clear sorts last: nothing needs attention there.
     match category {
         DiagnosticCategory::CpuBound => 0,
         DiagnosticCategory::GpuBound => 1,
@@ -931,6 +1000,7 @@ fn category_rank(category: DiagnosticCategory) -> u8 {
         DiagnosticCategory::BackgroundInterference => 6,
         DiagnosticCategory::StreamingOverhead => 7,
         DiagnosticCategory::Unknown => 8,
+        DiagnosticCategory::Stable => 9,
         _ => 255,
     }
 }
@@ -1942,19 +2012,23 @@ mod tests {
             system_samples: &system_samples,
         })?;
 
+        // Since stability.v1, a smooth fully-observed trace carries the Stable
+        // verdict instead of Unknown. The telemetry-absence guarantee this
+        // test guards is unchanged: no problem category may fire without its
+        // telemetry, so only Stable may appear here.
         assert_eq!(result.len(), 1);
-        let unknown = &result[0];
-        assert_eq!(unknown.category, rwp_core::DiagnosticCategory::Unknown);
-        assert_eq!(unknown.rule_id, "unknown.insufficient_evidence.v1");
-        assert_eq!(unknown.evidence_score, 0);
-        assert!(unknown.contradicting_evidence.is_empty());
-        assert_eq!(unknown.sample_count, 60);
-        assert_eq!(unknown.minimum_sample_count, 10);
-        assert!(
-            result
-                .iter()
-                .all(|diagnostic| diagnostic.category == rwp_core::DiagnosticCategory::Unknown)
-        );
+        let stable = &result[0];
+        assert_eq!(stable.category, rwp_core::DiagnosticCategory::Stable);
+        assert_eq!(stable.rule_id, "stability.v1");
+        assert!(!result.iter().any(|diagnostic| matches!(
+            diagnostic.category,
+            rwp_core::DiagnosticCategory::CpuBound
+                | rwp_core::DiagnosticCategory::GpuBound
+                | rwp_core::DiagnosticCategory::Thermal
+                | rwp_core::DiagnosticCategory::MemoryPressure
+                | rwp_core::DiagnosticCategory::VramPressure
+                | rwp_core::DiagnosticCategory::BackgroundInterference
+        )));
         Ok(())
     }
 
@@ -2064,6 +2138,122 @@ mod mutation_baseline_tests {
         SystemSample::new(timestamp_ns)
     }
 
+    type StabilityFixture = (
+        Vec<rwp_core::FrameSample>,
+        rwp_analysis::FrameStatistics,
+        Vec<rwp_core::StutterEvent>,
+    );
+
+    fn stability_fixture(
+        frame_time_ms: f64,
+        spike_at: Option<usize>,
+    ) -> Result<StabilityFixture, Box<dyn std::error::Error>> {
+        let frames = (0..64_u64)
+            .map(|index| {
+                let time = if spike_at == Some(index as usize) {
+                    50.0
+                } else {
+                    frame_time_ms
+                };
+                rwp_core::FrameSample::new(index.saturating_mul(16_000_000), time)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let frame_times = frames
+            .iter()
+            .map(|frame| frame.frame_time_ms)
+            .collect::<Vec<_>>();
+        let statistics = compute_statistics(
+            &frame_times,
+            StatisticsConfig {
+                p999_reliability_threshold: 1,
+            },
+        )?;
+        let stutters = match spike_at {
+            Some(index) => vec![rwp_core::StutterEvent {
+                start_timestamp_ns: index as u64 * 16_000_000,
+                end_timestamp_ns: index as u64 * 16_000_000,
+                peak_frame_time_ms: 50.0,
+                baseline_frame_time_ms: frame_time_ms,
+                candidate_frame_count: 1,
+                detector_parameters: Vec::new(),
+            }],
+            None => Vec::new(),
+        };
+        Ok((frames, statistics, stutters))
+    }
+
+    fn stability_diagnosis(
+        frames: &[rwp_core::FrameSample],
+        statistics: &rwp_analysis::FrameStatistics,
+        stutters: &[rwp_core::StutterEvent],
+    ) -> Result<Vec<rwp_core::Diagnostic>, Box<dyn std::error::Error>> {
+        let engine = DiagnosticEngine::new(RuleThresholds::default());
+        Ok(engine.diagnose(DiagnosisInput {
+            statistics,
+            frames,
+            stutters,
+            system_samples: &[],
+        })?)
+    }
+
+    #[test]
+    fn stability_rule_fires_for_smooth_trace() -> Result<(), Box<dyn std::error::Error>> {
+        let (frames, statistics, stutters) = stability_fixture(16.0, None)?;
+        let result = stability_diagnosis(&frames, &statistics, &stutters)?;
+        let stable = result
+            .iter()
+            .find(|diagnostic| diagnostic.rule_id == "stability.v1")
+            .ok_or("a smooth trace must carry a stability.v1 verdict")?;
+        assert_eq!(stable.category, rwp_core::DiagnosticCategory::Stable);
+        Ok(())
+    }
+
+    #[test]
+    fn stability_rule_absent_for_hitch_trace() -> Result<(), Box<dyn std::error::Error>> {
+        let (frames, statistics, stutters) = stability_fixture(16.0, Some(32))?;
+        let result = stability_diagnosis(&frames, &statistics, &stutters)?;
+        assert!(
+            !result
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "stability.v1"),
+            "a hitch trace must never carry a stability verdict"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stability_rule_absent_below_minimum() -> Result<(), Box<dyn std::error::Error>> {
+        let (frames, _, _) = stability_fixture(16.0, None)?;
+        let short = &frames[..10];
+        let short_times = short
+            .iter()
+            .map(|frame| frame.frame_time_ms)
+            .collect::<Vec<_>>();
+        let short_statistics = compute_statistics(
+            &short_times,
+            StatisticsConfig {
+                p999_reliability_threshold: 1,
+            },
+        )?;
+        let result = stability_diagnosis(short, &short_statistics, &[])?;
+        assert!(
+            !result
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "stability.v1"),
+            "below-minimum observations must never carry a stability verdict"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stability_rule_is_deterministic() -> Result<(), Box<dyn std::error::Error>> {
+        let (frames, statistics, stutters) = stability_fixture(16.0, None)?;
+        let first = stability_diagnosis(&frames, &statistics, &stutters)?;
+        let second = stability_diagnosis(&frames, &statistics, &stutters)?;
+        assert_eq!(first, second);
+        Ok(())
+    }
+
     #[test]
     fn category_ranks_follow_stable_order() {
         let expected = [
@@ -2076,6 +2266,7 @@ mod mutation_baseline_tests {
             (DiagnosticCategory::BackgroundInterference, 6),
             (DiagnosticCategory::StreamingOverhead, 7),
             (DiagnosticCategory::Unknown, 8),
+            (DiagnosticCategory::Stable, 9),
         ];
         for (category, rank) in expected {
             assert_eq!(category_rank(category), rank);
@@ -2085,7 +2276,7 @@ mod mutation_baseline_tests {
     #[test]
     fn threshold_parameters_reports_every_field() {
         let parameters = threshold_parameters(RuleThresholds::default());
-        assert_eq!(parameters.len(), 16);
+        assert_eq!(parameters.len(), 17);
         let value = |name: &str| {
             parameters
                 .iter()
@@ -2100,6 +2291,7 @@ mod mutation_baseline_tests {
         );
         assert_eq!(value("frame_pacing_ratio"), Some(1.75_f64.to_string()));
         assert_eq!(value("minimum_frame_samples"), Some(60_usize.to_string()));
+        assert_eq!(value("stability_margin_percent"), Some(1.0_f64.to_string()));
     }
 
     #[test]
@@ -2356,6 +2548,20 @@ mod mutation_baseline_tests {
                     ..RuleThresholds::default()
                 },
                 "activation_score",
+            ),
+            (
+                RuleThresholds {
+                    stability_margin_percent: 0.0,
+                    ..RuleThresholds::default()
+                },
+                "stability_margin_percent",
+            ),
+            (
+                RuleThresholds {
+                    stability_margin_percent: f64::NAN,
+                    ..RuleThresholds::default()
+                },
+                "stability_margin_percent",
             ),
         ];
         for (thresholds, field) in cases {

@@ -22,6 +22,9 @@ pub enum DiagnosticCategory {
     BackgroundInterference,
     /// Streaming or creator tooling correlates with degradation.
     StreamingOverhead,
+    /// Frame timing is stable within margin; the all-clear verdict that the
+    /// instant-stability notification keys on.
+    Stable,
     /// Evidence is insufficient or contradictory.
     Unknown,
 }
