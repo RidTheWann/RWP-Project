@@ -379,7 +379,7 @@ mod tests {
     fn bundle_refuses_overwrite_and_writes_json() -> Result<(), Box<dyn std::error::Error>> {
         let report = DoctorReport {
             schema_version: "rwp.doctor.v1",
-            rwp_version: "0.1.0",
+            rwp_version: "0.2.0",
             os: "test",
             arch: "test",
             presentmon: None,

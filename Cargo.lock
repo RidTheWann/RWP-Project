@@ -3054,7 +3054,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-analysis"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "insta",
@@ -3066,7 +3066,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-capture"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "rwp-core",
@@ -3077,7 +3077,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3094,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -3102,7 +3102,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-diagnostics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rwp-analysis",
  "rwp-core",
@@ -3111,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-report"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "rwp-analysis",
@@ -3124,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-session"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rwp-analysis",
  "rwp-capture",
@@ -3140,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-system"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nvml-wrapper",
  "rwp-core",
@@ -3151,7 +3151,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rwp-analysis",
  "rwp-core",
@@ -3161,7 +3161,7 @@ dependencies = [
 
 [[package]]
 name = "rwp-ui-native"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rwp-analysis",
  "rwp-report",

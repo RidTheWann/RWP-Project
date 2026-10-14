@@ -1,7 +1,8 @@
 # Changelog
 
-Versioning follows Semantic Versioning; the version stays `0.1.0` for the
-whole alpha (first tag `v0.1.0-alpha` published as a GitHub pre-release).
+Versioning follows Semantic Versioning; the tree is at `0.2.0` after the
+post-alpha console-stop work (first tag `v0.1.0-alpha` published as a GitHub
+pre-release; its notes stay frozen under `[0.1.0-alpha]` below).
 Entry format: one bullet per user-facing change under
 `Added`/`Changed`/`Fixed`/`Security`; process-only work is recorded in
 `docs/autopilot/STATE.md`, never here (CI-era process entries moved to

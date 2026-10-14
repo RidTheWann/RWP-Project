@@ -1325,7 +1325,7 @@ mod tests {
             intersection_seconds: None,
         };
         let provenance = rwp_session::SessionProvenance {
-            rwp_version: String::from("0.1.0"),
+            rwp_version: String::from("0.2.0"),
             git_sha: None,
             build_target: None,
             build_profile: None,
@@ -1515,7 +1515,7 @@ mod tests {
         )?;
         let manifest = rwp_session::SessionManifest {
             provenance: rwp_session::SessionProvenance {
-                rwp_version: String::from("0.1.0"),
+                rwp_version: String::from("0.2.0"),
                 git_sha: None,
                 build_target: None,
                 build_profile: None,

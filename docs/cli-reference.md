@@ -1,4 +1,4 @@
-# CLI Reference (`rwp 0.1.0`)
+# CLI Reference (`rwp 0.2.0`)
 
 Generated from the built binary, never hand-written:
 

@@ -82,7 +82,7 @@ di Fase 7), tetapi seksi-seksi berikut dinyatakan NON-BERLAKU sebagai otoritas:
 
 ## 5. Keputusan versi
 
-Tetap `0.1.0` selama alpha (SemVer formal + Keep-a-Changelog di Fase 6).
+Versi berjalan `0.2.0` pasca-alpha (SemVer formal + Keep-a-Changelog; rekam alpha `0.1.0` tetap beku di catatan rilisnya).
 
 ## 6. Gate mutants (diadopsi owner 2026-10-10)
 

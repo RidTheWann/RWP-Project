@@ -1,6 +1,6 @@
 # Unreleased (post-0.1.0-alpha)
 
-Version stays `0.1.0`. User-facing changes accumulate in `CHANGELOG.md` under
+Version `0.2.0` in tree (bump from `0.1.0`; alpha record frozen). User-facing changes accumulate in `CHANGELOG.md` under
 `## Unreleased`; this note tracks known issues for the unreleased tree.
 
 ## New since 0.1.0-alpha

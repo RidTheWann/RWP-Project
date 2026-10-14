@@ -534,7 +534,7 @@ mod tests {
             system_samples: samples,
             source_csv: csv,
             provenance: super::SessionProvenance {
-                rwp_version: "0.1.0".to_owned(),
+                rwp_version: "0.2.0".to_owned(),
                 git_sha: None,
                 build_target: None,
                 build_profile: None,
@@ -805,7 +805,7 @@ mod tests {
     {
         let manifest = super::SessionManifest {
             provenance: super::SessionProvenance {
-                rwp_version: String::from("0.1.0"),
+                rwp_version: String::from("0.2.0"),
                 git_sha: Some(String::from("abcdef1")),
                 build_target: Some(String::from("x86_64-pc-windows-msvc")),
                 build_profile: Some(String::from("release")),

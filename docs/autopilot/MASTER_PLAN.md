@@ -40,7 +40,7 @@ v1.0.0 hanya dicatat (CHANGELOG + provenance) jika SEMUA kriteria ini terpenuhi 
 
 ## 2. Baseline dan temuan audit (AUD)
 
-Baseline: workspace 10 crate, versi 0.1.0, edition 2024, MSRV 1.91, toolchain 1.99.0, target `x86_64-pc-windows-msvc`. Milestone M1–M8 terimplementasi, M10 baru fondasi packaging.
+Baseline: workspace 10 crate, versi 0.2.0 (post-alpha; alpha 0.1.0 frozen), edition 2024, MSRV 1.91, toolchain 1.99.0, target `x86_64-pc-windows-msvc`. Milestone M1–M8 terimplementasi, M10 baru fondasi packaging.
 
 PENTING: temuan di bawah berasal dari analisis statis (belum dikompilasi). **Verifikasi ulang tiap AUD terhadap kode terkini sebelum memperbaikinya.** Jika sudah tidak berlaku, tandai `STALE` di STATE.md beserta alasannya.
 
