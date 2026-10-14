@@ -36,6 +36,25 @@ pub enum EvidencePolarity {
     Contradicting,
 }
 
+/// Preliminary in-memory stability verdict for live capture surfaces.
+///
+/// This is deliberately separate from persisted [`Diagnostic`] results: it is
+/// computed from current observations only, never serialized into sessions or
+/// reports, and rendered by the always-on in-app banner. Below-minimum
+/// observations yield [`PreliminaryStability::InsufficientData`], never a
+/// stability claim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreliminaryStability {
+    /// Fewer observations than the minimum, or degenerate input that cannot
+    /// be assessed; never presented as stable or unstable.
+    InsufficientData,
+    /// Enough observations with no stutter events and drift within margin.
+    Stable,
+    /// Enough observations showing stutter events or drift beyond margin.
+    Unstable,
+}
+
 /// A structured evidence item emitted by the diagnostic engine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvidenceItem {

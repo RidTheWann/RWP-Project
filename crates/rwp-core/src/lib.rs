@@ -3,7 +3,9 @@
 mod diagnostic;
 mod sample;
 
-pub use diagnostic::{Diagnostic, DiagnosticCategory, EvidenceItem, EvidencePolarity};
+pub use diagnostic::{
+    Diagnostic, DiagnosticCategory, EvidenceItem, EvidencePolarity, PreliminaryStability,
+};
 pub use sample::{
     BackgroundActivity, FrameSample, ProcessThreadSample, StutterEvent, SystemSample,
 };

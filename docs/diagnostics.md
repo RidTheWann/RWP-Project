@@ -75,6 +75,19 @@ The rule emits separate event-rate and tail-ratio evidence with rule id frame_pa
 
 Unavailable telemetry remains absent (None). A missing GPU clock, missing GPU temperature, insufficient stutter count, or unusable timestamp span cannot be converted into zero-valued evidence.
 
+## Preliminary stability (in-memory live surfaces only)
+
+`preliminary_stability` gives live capture surfaces an early verdict without
+touching persistence: below the engine's minimum-frame bound (default 60) the
+verdict is always insufficient data, never a stability claim. At or above the
+bound, a stable verdict additionally requires zero stutter events and
+first-half vs second-half mean frame-time drift within the shared
+equivalence margin (default 1%, the A/A margin — one system-wide margin,
+documented once here). The verdict is never written to sessions or reports,
+and no refresh rate is synthesized for it. "Never Stable while
+under-powered" is literal here: insufficient or degenerate evidence can only
+ever yield insufficient data, never Stable and never Unstable-by-guess.
+
 ## Streaming overhead — deferred
 
 The `streaming_overhead` category exists in the product contract, but no rule emits it yet. Normalized telemetry currently exposes target-process GPU utilization and redacted background CPU activity, but no encoder or video-engine signal that could attribute degradation to streaming or creator tooling; inferring the category from generic background activity alone would fabricate an attribution the evidence does not support. The category stays deferred until a normalized encoder observation exists.

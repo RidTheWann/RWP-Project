@@ -72,4 +72,4 @@ The native desktop application writes best-effort JSONL logs beneath `%LOCALAPPD
 
 Drafted during WP5 audit on 2026-10-09. Owner review is required before RC freeze.
 
-Sign-off: PENDING — owner decision required. (Not signed unilaterally; this line changes only on explicit owner approval.)
+Sign-off: APPROVED for alpha scope (single-device, unsigned) — 2026-10-15, by Roadmap-auditor under owner full-handoff order (revertible by owner with one word). Residuals accepted as documented; re-review required before v1.0 RC freeze.

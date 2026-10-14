@@ -914,16 +914,7 @@ mod tests {
         use std::time::{Duration, Instant};
 
         fn fake_child_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-            let exe = std::env::current_exe()?;
-            let deps_dir = exe
-                .parent()
-                .ok_or("current test executable has no parent directory")?;
-            let profile_dir = deps_dir
-                .parent()
-                .ok_or("current test executable has no profile directory")?;
-            Ok(profile_dir
-                .join("examples")
-                .join("fake_ctrl_break_child.exe"))
+            example_binary("fake_ctrl_break_child.exe")
         }
 
         fn wait_for_ready(ready: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -940,6 +931,52 @@ mod tests {
                     .into());
                 }
                 std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        fn await_helper_binary(
+            path: &std::path::Path,
+            label: &str,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            // The outer cargo run may still be linking example binaries while
+            // test binaries already execute (observed: helper-dependent tests
+            // failing fast under coverage runs whose target dir relinks
+            // everything). Wait for the file to appear and settle instead of
+            // failing fast; only a genuinely absent helper errors, with the
+            // same prerequisite verdict as before. No assertion depends on
+            // timing: the deadlines below only guard hangs.
+            let missing = || {
+                format!(
+                    "{label} missing at {}; the workspace gate builds it automatically, otherwise pre-build once with: cargo build --locked --examples -p rwp-capture -p rwp-system",
+                    path.display()
+                )
+            };
+            let deadline = Instant::now() + Duration::from_secs(180);
+            loop {
+                if path.exists() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err(missing().into());
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            let settle_deadline = Instant::now() + Duration::from_secs(30);
+            let mut previous = std::fs::metadata(path)
+                .map_err(|error| format!("stat helper binary failed: {error}"))?
+                .len();
+            loop {
+                std::thread::sleep(Duration::from_millis(500));
+                let current = std::fs::metadata(path)
+                    .map_err(|error| format!("stat helper binary failed: {error}"))?
+                    .len();
+                if current == previous {
+                    return Ok(());
+                }
+                previous = current;
+                if Instant::now() >= settle_deadline {
+                    return Err(missing().into());
+                }
             }
         }
 
@@ -982,13 +1019,7 @@ mod tests {
             let csv = root.join("run.csv");
             let ready = root.join("ready");
             let helper = fake_child_path()?;
-            if !helper.exists() {
-                return Err(format!(
-                    "fake child helper missing at {}; build it with: cargo build --locked -p rwp-system --examples",
-                    helper.display()
-                )
-                .into());
-            }
+            await_helper_binary(&helper, "fake child helper")?;
             let child = spawn_fake_child(&helper, "graceful", &csv, &ready)?;
             wait_for_ready(&ready)?;
             let mut process = PresentMonProcess {
@@ -1042,13 +1073,7 @@ mod tests {
             let csv = root.join("run.csv");
             let ready = root.join("ready");
             let helper = fake_child_path()?;
-            if !helper.exists() {
-                return Err(format!(
-                    "fake child helper missing at {}; build it with: cargo build --locked -p rwp-system --examples",
-                    helper.display()
-                )
-                .into());
-            }
+            await_helper_binary(&helper, "fake child helper")?;
             let child = spawn_fake_child(&helper, "ignore", &csv, &ready)?;
             wait_for_ready(&ready)?;
             let mut process = PresentMonProcess {
@@ -1131,7 +1156,27 @@ mod tests {
             let profile_dir = deps_dir
                 .parent()
                 .ok_or("current test executable has no profile directory")?;
-            Ok(profile_dir.join("examples").join(name))
+            let primary = profile_dir.join("examples").join(name);
+            if primary.exists() {
+                return Ok(primary);
+            }
+            // Coverage flow (`cargo llvm-cov` builds into a separate target
+            // dir and only ever links example test-harnesses there, never the
+            // plain runnable binaries): fall back to the sibling
+            // normal-target build, which the standard gate keeps populated.
+            // This resolves only inside a nested target layout; otherwise the
+            // callers below still report the canonical missing-helper
+            // prerequisite. Helpers are protocol-stable binaries, so a fresh
+            // sibling is behaviorally equivalent for what the tests assert
+            // (exit codes, CSV rows, signal delivery).
+            let sibling = profile_dir
+                .parent()
+                .and_then(|dir| dir.parent())
+                .map(|target| target.join("debug").join("examples").join(name));
+            match sibling {
+                Some(path) if path.exists() => Ok(path),
+                _ => Ok(primary),
+            }
         }
 
         fn stop_helper_paths() -> Result<(PathBuf, PathBuf), Box<dyn std::error::Error>> {
@@ -1153,13 +1198,7 @@ mod tests {
                 ("no-console driver", &driver),
                 ("fake child helper", &helper),
             ] {
-                if !path.exists() {
-                    return Err(format!(
-                        "{label} missing at {}; the workspace gate builds it automatically, otherwise pre-build once with: cargo build --locked --examples -p rwp-capture -p rwp-system",
-                        path.display()
-                    )
-                    .into());
-                }
+                await_helper_binary(path, label)?;
             }
             Ok((driver, helper))
         }
@@ -1302,13 +1341,7 @@ mod tests {
             use std::process::{Command, Stdio};
 
             let probe = example_binary("console_stop_probe.exe")?;
-            if !probe.exists() {
-                return Err(format!(
-                    "console-stop probe missing at {}; the workspace gate builds it automatically, otherwise pre-build once with: cargo build --locked --examples -p rwp-capture",
-                    probe.display()
-                )
-                .into());
-            }
+            await_helper_binary(&probe, "console-stop probe")?;
             let root = std::env::temp_dir().join(format!(
                 "rwp-stop-probe-{}-{}",
                 std::process::id(),

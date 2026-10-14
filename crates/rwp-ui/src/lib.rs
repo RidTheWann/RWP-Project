@@ -1,7 +1,7 @@
 //! Framework-neutral presentation model for the M7 dashboard.
 
 use rwp_analysis::{ComparisonResult, DeltaDirection};
-use rwp_core::{Diagnostic, DiagnosticCategory, EvidenceItem};
+use rwp_core::{Diagnostic, DiagnosticCategory, EvidenceItem, PreliminaryStability};
 use rwp_report::PerformanceReport;
 use serde::Serialize;
 
@@ -225,6 +225,49 @@ fn evidence_text(item: &EvidenceItem) -> String {
     format!("{}: {}", item.evidence_id, item.statement)
 }
 
+/// Always-on in-app stability banner content.
+///
+/// The banner exists in every state (unknown included): it is the source of
+/// truth the toast notification falls back to. Detail lines carry observation
+/// counts only (numbers plus static literals, never paths or identities).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StabilityBanner {
+    /// Banner verdict, mirroring the preliminary assessment.
+    pub verdict: PreliminaryStability,
+    /// One-line state headline.
+    pub headline: String,
+    /// Observation counts behind the headline.
+    pub detail: String,
+}
+
+/// Renders the always-on stability banner for a preliminary verdict.
+pub fn render_stability_banner(
+    verdict: PreliminaryStability,
+    observed: usize,
+    minimum: usize,
+    stutter_events: usize,
+) -> StabilityBanner {
+    let (headline, detail) = match verdict {
+        PreliminaryStability::InsufficientData => (
+            String::from("Stability unknown"),
+            format!("{observed} of {minimum} minimum observations"),
+        ),
+        PreliminaryStability::Stable => (
+            String::from("Stable"),
+            format!("{observed} observations, no stutter events, drift within margin"),
+        ),
+        PreliminaryStability::Unstable => (
+            String::from("Unstable"),
+            format!("{observed} observations, {stutter_events} stutter events"),
+        ),
+    };
+    StabilityBanner {
+        verdict,
+        headline,
+        detail,
+    }
+}
+
 fn diagnostic_category_label(category: DiagnosticCategory) -> String {
     let label = match category {
         DiagnosticCategory::CpuBound => "CPU bound",
@@ -410,5 +453,23 @@ mod tests {
         assert_eq!(model.metrics.len(), 4);
         assert!(model.comparison.is_none());
         Ok(())
+    }
+
+    #[test]
+    fn banner_renders_each_preliminary_state() {
+        use rwp_core::PreliminaryStability;
+        let unknown =
+            super::render_stability_banner(PreliminaryStability::InsufficientData, 12, 60, 0);
+        assert_eq!(unknown.headline, "Stability unknown");
+        assert_eq!(unknown.detail, "12 of 60 minimum observations");
+        let stable = super::render_stability_banner(PreliminaryStability::Stable, 64, 60, 0);
+        assert_eq!(stable.headline, "Stable");
+        assert_eq!(
+            stable.detail,
+            "64 observations, no stutter events, drift within margin"
+        );
+        let unstable = super::render_stability_banner(PreliminaryStability::Unstable, 64, 60, 3);
+        assert_eq!(unstable.headline, "Unstable");
+        assert_eq!(unstable.detail, "64 observations, 3 stutter events");
     }
 }

@@ -2,8 +2,8 @@
 
 use rwp_analysis::FrameStatistics;
 use rwp_core::{
-    Diagnostic, DiagnosticCategory, EvidenceItem, EvidencePolarity, FrameSample, StutterEvent,
-    SystemSample,
+    Diagnostic, DiagnosticCategory, EvidenceItem, EvidencePolarity, FrameSample,
+    PreliminaryStability, StutterEvent, SystemSample,
 };
 
 /// Explicit thresholds used by the M5 rule engine.
@@ -486,6 +486,9 @@ impl DiagnosticEngine {
             ),
         )];
 
+        // Mutants: relaxing `>` to `>=` is unobservable — a zero-aligned
+        // result is always discarded as `None` below, taking any extra
+        // evidence item with it.
         if aligned_events > 0 {
             support.push(supporting(
                 "background.cpu_burst",
@@ -555,6 +558,62 @@ impl DiagnosticEngine {
                 .minimum_frame_samples
                 .min(self.thresholds.minimum_system_samples),
         }
+    }
+}
+
+/// Preliminary in-memory stability assessment for live capture surfaces.
+///
+/// Pure and deterministic: the same inputs always yield the same verdict.
+/// `minimum_frames` reuses the engine's minimum-frame bound and
+/// `stability_margin_percent` the shared equivalence margin: below-minimum or
+/// degenerate input yields [`PreliminaryStability::InsufficientData`], never
+/// a stability claim. A stable verdict additionally requires zero stutter
+/// events and split-half mean drift within margin, without synthesizing any
+/// refresh rate.
+///
+/// Interpretation note: "stability" here is single-capture drift equivalence
+/// (first-half vs second-half mean frame time, the one-capture analogue of
+/// the A/A equivalence margin), not a hardware claim and not a persistence
+/// contract — the verdict is never written to sessions or reports.
+pub fn preliminary_stability(
+    frames: &[FrameSample],
+    stutter_events: usize,
+    minimum_frames: usize,
+    stability_margin_percent: f64,
+) -> PreliminaryStability {
+    if frames.len() < minimum_frames {
+        return PreliminaryStability::InsufficientData;
+    }
+    if stutter_events > 0 {
+        return PreliminaryStability::Unstable;
+    }
+    if stability_margin_percent <= 0.0 || !stability_margin_percent.is_finite() {
+        return PreliminaryStability::InsufficientData;
+    }
+    let half = frames.len() / 2;
+    let (first, second) = frames.split_at(half);
+    // Mutants: `&&` is equivalent here — the only single-empty-half case
+    // (`n == 1`) yields NaN means, which the finiteness guard below maps to
+    // the same verdict.
+    if first.is_empty() || second.is_empty() {
+        return PreliminaryStability::InsufficientData;
+    }
+    let mean = |rows: &[FrameSample]| {
+        rows.iter().map(|frame| frame.frame_time_ms).sum::<f64>() / rows.len() as f64
+    };
+    let first_mean = mean(first);
+    let second_mean = mean(second);
+    // Mutants: validated constructors keep non-empty-slice means finite and
+    // positive, so no `&&` reshaping of these guards can diverge through the
+    // public API; they stay as defense for degenerate math.
+    if !first_mean.is_finite() || !second_mean.is_finite() || first_mean <= 0.0 {
+        return PreliminaryStability::InsufficientData;
+    }
+    let drift_percent = 100.0 * (second_mean - first_mean).abs() / first_mean;
+    if drift_percent <= stability_margin_percent {
+        PreliminaryStability::Stable
+    } else {
+        PreliminaryStability::Unstable
     }
 }
 
@@ -2575,6 +2634,139 @@ mod mutation_baseline_tests {
                 .contradicting_evidence
                 .iter()
                 .any(|item| item.evidence_id == "background.low_alignment")
+        );
+        Ok(())
+    }
+
+    fn smooth_frames(
+        count: usize,
+        frame_time_ms: f64,
+    ) -> Result<Vec<rwp_core::FrameSample>, Box<dyn std::error::Error>> {
+        (0..count as u64)
+            .map(|index| {
+                rwp_core::FrameSample::new(index.saturating_mul(16_000_000), frame_time_ms)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("synthetic frame time rejected: {error}").into())
+    }
+
+    #[test]
+    fn preliminary_below_minimum_is_insufficient() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = smooth_frames(59, 16.0)?;
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::InsufficientData
+        );
+        assert_eq!(
+            super::preliminary_stability(&[], 0, 60, 1.0),
+            rwp_core::PreliminaryStability::InsufficientData
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_is_deterministic() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = smooth_frames(64, 16.0)?;
+        let first = super::preliminary_stability(&frames, 0, 60, 1.0);
+        let second = super::preliminary_stability(&frames, 0, 60, 1.0);
+        assert_eq!(first, second);
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_smooth_trace_is_stable() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = smooth_frames(64, 16.0)?;
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::Stable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_hitch_trace_is_unstable() -> Result<(), Box<dyn std::error::Error>> {
+        let mut frames = smooth_frames(63, 16.0)?;
+        frames.push(rwp_core::FrameSample::new(63 * 16_000_000, 50.0)?);
+        assert_eq!(
+            super::preliminary_stability(&frames, 2, 60, 1.0),
+            rwp_core::PreliminaryStability::Unstable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_minimum_boundary_is_exact() -> Result<(), Box<dyn std::error::Error>> {
+        // Exactly-minimum smooth observations proceed (strict `<` below the
+        // bound, not `<=`).
+        let frames = smooth_frames(60, 16.0)?;
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::Stable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_stutter_with_in_margin_drift_is_unstable()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // Stutter evidence short-circuits before the drift math: drift here is
+        // only ~0.6%, inside margin, yet the verdict stays Unstable.
+        let mut frames = smooth_frames(32, 16.0)?;
+        frames.extend(smooth_frames(32, 16.1)?);
+        assert_eq!(
+            super::preliminary_stability(&frames, 1, 60, 1.0),
+            rwp_core::PreliminaryStability::Unstable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_invalid_margin_is_insufficient() -> Result<(), Box<dyn std::error::Error>> {
+        let frames = smooth_frames(64, 16.0)?;
+        for margin in [0.0, f64::NAN] {
+            assert_eq!(
+                super::preliminary_stability(&frames, 0, 60, margin),
+                rwp_core::PreliminaryStability::InsufficientData
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_odd_split_near_boundary_is_stable() -> Result<(), Box<dyn std::error::Error>> {
+        // Odd split (30/31) with ~0.5% drift: stable, far from the margin on
+        // both sides so no floating-point boundary gambling is involved.
+        let mut frames = smooth_frames(30, 16.0)?;
+        frames.extend(smooth_frames(31, 16.08)?);
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::Stable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_small_drift_is_stable() -> Result<(), Box<dyn std::error::Error>> {
+        // ~0.6% drift with no stutters stays Stable; scaling the drift ratio
+        // itself (instead of dividing) would report otherwise.
+        let mut frames = smooth_frames(32, 16.0)?;
+        frames.extend(smooth_frames(32, 16.1)?);
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::Stable
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn preliminary_drift_outside_margin_is_unstable() -> Result<(), Box<dyn std::error::Error>> {
+        // Second-half mean ~5% above the first half: clearly outside the 1%
+        // margin, with no floating-point boundary gambling.
+        let mut frames = smooth_frames(32, 16.0)?;
+        frames.extend(smooth_frames(32, 16.8)?);
+        assert_eq!(
+            super::preliminary_stability(&frames, 0, 60, 1.0),
+            rwp_core::PreliminaryStability::Unstable
         );
         Ok(())
     }
