@@ -29,6 +29,9 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 - [ ] Stop requests cancellation and the capture reaches a terminal state.
 - [ ] Closing the application does not leave an unowned PresentMon child process.
 - [ ] Interrupted capture is represented as interrupted capture state, not a generic failed analysis.
+- [ ] "Notify when stable" is checked by default; unchecking it suppresses only the toast, never the banner.
+- [ ] A stable completed capture shows the Stable banner state; other outcomes show Not stable or Stability unknown, never a stale verdict.
+- [ ] Disabling the notification or running where toasts are refused still leaves the banner as the source of truth.
 
 ## Persistence and history
 

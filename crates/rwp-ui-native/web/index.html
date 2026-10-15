@@ -71,6 +71,10 @@
             <input id="no-process-probing" type="checkbox" />
             <span>Disable process/thread telemetry probing</span>
           </label>
+          <label class="checkbox-row">
+            <input id="notify-stable" type="checkbox" checked />
+            <span>Notify when stable</span>
+          </label>
         </div>
 
         <div class="capture-actions">
@@ -149,6 +153,7 @@
               <span id="result-frames">0 frames</span>
               <span id="result-telemetry">0 telemetry samples</span>
             </div>
+            <p class="capture-note" id="stability-banner">Stability unknown — start a capture.</p>
           </div>
         </section>
 

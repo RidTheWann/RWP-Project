@@ -1087,6 +1087,23 @@ mod audit_regressions {
     }
 
     #[test]
+    fn stable_notification_defaults_on_and_deserializes() -> Result<(), Box<dyn std::error::Error>>
+    {
+        // Notifications are ON unless explicitly disabled; the in-app banner
+        // renders regardless. Missing-field tolerance keeps older webviews
+        // working against this backend.
+        let request: super::SessionStartRequest = serde_json::from_str(
+            r#"{"presentmon_executable":"a","output_file":"b","process_id":1,"duration_seconds":60}"#,
+        )?;
+        assert!(!request.disable_stable_notification);
+        let request: super::SessionStartRequest = serde_json::from_str(
+            r#"{"presentmon_executable":"a","output_file":"b","process_id":1,"duration_seconds":60,"disable_stable_notification":true}"#,
+        )?;
+        assert!(request.disable_stable_notification);
+        Ok(())
+    }
+
+    #[test]
     fn frontend_grants_no_notification_permission() {
         // The toast is sent from Rust through the plugin backend; the webview
         // must never gain notification IPC. Any future grant fails closed here

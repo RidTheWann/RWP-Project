@@ -17,6 +17,8 @@ const els = {
   interval: document.querySelector("#sample-interval-ms"),
   excludeDropped: document.querySelector("#exclude-dropped"),
   noProcessProbing: document.querySelector("#no-process-probing"),
+  notifyStable: document.querySelector("#notify-stable"),
+  stabilityBanner: document.querySelector("#stability-banner"),
   resultTitle: document.querySelector("#result-title"),
   resultDetail: document.querySelector("#result-detail"),
   resultFrames: document.querySelector("#result-frames"),
@@ -135,6 +137,27 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function renderStabilityBanner(diagnostics, state) {
+  const banner = els.stabilityBanner;
+  if (!banner) return;
+  if (state === "running") {
+    banner.textContent = "Measuring stability…";
+    return;
+  }
+  if (state !== "completed") {
+    banner.textContent = "Stability unknown — start a capture.";
+    return;
+  }
+  const stable = (diagnostics ?? []).find((item) =>
+    item && item.rule_id === "stability.v1" && item.category === "Stable");
+  if (stable) {
+    const evidence = [...(stable.supporting_evidence ?? [])].join(" · ");
+    banner.textContent = evidence ? `Stable — ${evidence}` : "Stable";
+    return;
+  }
+  banner.textContent = "Not stable — see diagnostics.";
+}
+
 function metricCard(metric) {
   const card = document.querySelector(`[data-metric="${metric.id}"]`);
   if (!card) return;
@@ -169,6 +192,7 @@ function renderCompleted(snapshot) {
     : '<tr><td colspan="5" class="empty-row">No stutter events detected</td></tr>';
 
   const diagnostics = dashboard.diagnostics ?? [];
+  renderStabilityBanner(diagnostics, "completed");
   els.diagnosticCount.textContent = `${diagnostics.length} diagnosis${diagnostics.length === 1 ? "" : "es"}`;
   els.diagnosticList.innerHTML = diagnostics.length
     ? diagnostics.map((item) => `
@@ -250,6 +274,7 @@ function renderSnapshot(snapshot) {
     clearRemediation();
     setProgress(false);
     setControls(false);
+    renderStabilityBanner([], "idle");
     return;
   }
 
@@ -259,6 +284,7 @@ function renderSnapshot(snapshot) {
     clearRemediation();
     setProgress(true, snapshot);
     setControls(true);
+    renderStabilityBanner([], "running");
     return;
   }
 
@@ -269,6 +295,7 @@ function renderSnapshot(snapshot) {
     els.resultTitle.textContent = "Capture failed";
     els.resultDetail.textContent = snapshot.message;
     setControls(false);
+    renderStabilityBanner([], "failed");
     return;
   }
 
@@ -340,6 +367,7 @@ els.start.addEventListener("click", async () => {
         sample_interval_ms: interval,
         exclude_dropped: els.excludeDropped.checked,
         no_process_probing: els.noProcessProbing.checked,
+        disable_stable_notification: els.notifyStable ? !els.notifyStable.checked : false,
       },
     });
     renderSnapshot(snapshot);
