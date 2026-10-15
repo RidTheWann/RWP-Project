@@ -1,13 +1,11 @@
-# Unreleased (post-0.1.0-alpha)
+# Unreleased (post-0.2.0-alpha)
 
-Version `0.2.0` in tree (bump from `0.1.0`; alpha record frozen). User-facing changes accumulate in `CHANGELOG.md` under
+Version `0.2.0` in tree (`0.2.0-alpha` released as GitHub pre-release; `0.1.0-alpha` record frozen). User-facing changes accumulate in `CHANGELOG.md` under
 `## Unreleased`; this note tracks known issues for the unreleased tree.
 
-## New since 0.1.0-alpha
+## New since 0.2.0-alpha
 
-- `rwp capture` CLI for live Windows capture (same `SessionRunner`
-  orchestration, session layout, and manifest as the GUI). See
-  `docs/cli-reference.md` (`rwp capture --help`) and ADR-0031.
+No user-facing changes yet since `0.2.0-alpha`.
 
 ## Known issues (unreleased tree)
 
@@ -30,5 +28,5 @@ Version `0.2.0` in tree (bump from `0.1.0`; alpha record frozen). User-facing ch
   is unverified.
 
 Provenance: local gate on the pinned 1.99.0 toolchain (`docs/local-gates.md`);
-per-batch outputs in `docs/autopilot/STATE.md`. No tag, no GitHub Release, no
-version bump for unreleased work.
+per-batch outputs in `docs/autopilot/STATE.md`. Release history:
+`0.1.0-alpha.md`, `0.2.0-alpha.md`; no version bump for unreleased work.
