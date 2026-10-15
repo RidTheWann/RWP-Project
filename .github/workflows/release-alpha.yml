@@ -88,9 +88,12 @@ jobs:
         working-directory: crates/rwp-ui-native/src-tauri
         run: cargo tauri build --bundles nsis
 
+      # NOTE: `cargo tauri build` resolves the target dir through the Cargo
+      # workspace, so the bundle lands in the workspace-root `target/`, NOT
+      # in `crates/rwp-ui-native/src-tauri/target/` (run #2 failed here).
       - name: SHA256SUMS
         run: |
-          $bundle = "crates/rwp-ui-native/src-tauri/target/release/bundle/nsis"
+          $bundle = "target/release/bundle/nsis"
           $exes = Get-ChildItem -LiteralPath $bundle -Filter "*setup.exe"
           if ($exes.Count -eq 0) { throw "no NSIS setup.exe found in $bundle" }
           $lines = foreach ($exe in $exes) {
@@ -109,6 +112,6 @@ jobs:
           prerelease: true
           generate_release_notes: false
           files: |
-            crates/rwp-ui-native/src-tauri/target/release/bundle/nsis/*setup.exe
-            crates/rwp-ui-native/src-tauri/target/release/bundle/nsis/SHA256SUMS
+            target/release/bundle/nsis/*setup.exe
+            target/release/bundle/nsis/SHA256SUMS
             tauri-cli-version.txt
