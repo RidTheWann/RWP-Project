@@ -102,7 +102,7 @@ jobs:
           Get-ChildItem -LiteralPath $bundle | Select-Object Name, Length
 
       - name: Publish GitHub pre-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           generate_release_notes: false
