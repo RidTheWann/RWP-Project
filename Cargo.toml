@@ -20,7 +20,7 @@ resolver = "3"
 version = "0.2.0"
 description = "Evidence-based gaming and streaming performance analyzer for Windows 11"
 edition = "2024"
-rust-version = "1.91.0"
+rust-version = "1.99.0"
 license = "MIT OR Apache-2.0"
 publish = false
 
