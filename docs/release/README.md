@@ -1,8 +1,12 @@
 # Local Release Artifacts (Fase 6)
 
-Release notes for this alpha: `0.1.0-alpha.md`.
+Release notes for the first alpha: `0.1.0-alpha.md`.
 
-Unreleased tree (post-alpha, version `0.2.0` in tree): `unreleased.md`.
+Release notes for the second alpha: `0.2.0-alpha.md` (tag `v0.2.0-alpha`;
+installer built and published automatically by
+`.github/workflows/release-alpha.yml`).
+
+Unreleased tree (post-`0.2.0-alpha`, version `0.2.0` in tree): `unreleased.md`.
 
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.

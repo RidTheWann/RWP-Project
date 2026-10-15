@@ -1,14 +1,18 @@
 # Changelog
 
 Versioning follows Semantic Versioning; the tree is at `0.2.0` after the
-post-alpha console-stop work (first tag `v0.1.0-alpha` published as a GitHub
-pre-release; its notes stay frozen under `[0.1.0-alpha]` below).
+post-alpha console-stop work (tags `v0.1.0-alpha` and `v0.2.0-alpha` published
+as GitHub pre-releases; their notes stay frozen under their sections below).
 Entry format: one bullet per user-facing change under
 `Added`/`Changed`/`Fixed`/`Security`; process-only work is recorded in
 `docs/autopilot/STATE.md`, never here (CI-era process entries moved to
 `docs/autopilot/archive/CHANGELOG-ci-era.md`).
 
 ## Unreleased
+
+No user-facing changes yet since `0.2.0-alpha`.
+
+## [0.2.0-alpha] - 2026-10-16
 
 ### Added
 - Add the `stability.v1` diagnostic rule: stutter-free captures at or above the minimum-frame bound with split-half mean drift inside the shared 1% equivalence margin now carry an explicit Stable verdict (with threshold provenance) that the instant-stability notification keys on; below-minimum observations still yield no stability verdict.
