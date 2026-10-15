@@ -418,11 +418,25 @@ impl PresentMonRunner {
         #[cfg(windows)]
         {
             preflight_presentmon_permissions()?;
-            let version = detect_presentmon_version(&executable)?;
-            if !version.is_supported() {
-                return Err(PresentMonCaptureError::Version(
-                    rwp_system::PresentMonVersionError::UnsupportedVersion { detected: version },
-                ));
+            match detect_presentmon_version(&executable) {
+                Ok(version) => {
+                    if !version.is_supported() {
+                        return Err(PresentMonCaptureError::Version(
+                            rwp_system::PresentMonVersionError::UnsupportedVersion {
+                                detected: version,
+                            },
+                        ));
+                    }
+                }
+                // Binaries without a version resource (observed on genuine
+                // PresentMon 2.6.0) run as version-unknown: the SHA-256 lands
+                // in session provenance and the v2 CSV schema gate still
+                // rejects non-v2 output. Only detected-but-unsupported
+                // versions fail here.
+                Err(rwp_system::PresentMonVersionError::UnknownVersion { .. }) => {
+                    tracing::warn!(target: "rwp", event = "presentmon_version_unknown");
+                }
+                Err(error) => return Err(PresentMonCaptureError::Version(error)),
             }
         }
         if config.output_file.exists() {

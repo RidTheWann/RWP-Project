@@ -1,7 +1,7 @@
 "$schema" = "../gen/schemas/schema.json"
 
 [[permission]]
-identifier = "default"
+identifier = "session-commands"
 description = "Allows the main window to invoke only the registered session application commands."
 commands.allow = [
   "session_start",

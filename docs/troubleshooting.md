@@ -23,7 +23,9 @@ Every CLI failure prints a stable `RWP-Exxxx` code plus a `Fix:` line; with
 ## `rwp doctor` first
 
 Run `rwp doctor --presentmon <PATH>` before capturing. It checks the
-executable, version support, permissions, and (advisory) Authenticode
+executable, version support (a binary without a version resource reports
+version-unknown as advisory, with its SHA-256 recorded; only a detected
+non-2.x version fails), permissions, and (advisory) Authenticode
 signature without failing on unsigned binaries. `--bundle <file>` writes a
 redacted JSON bundle safe to attach to a report.
 

@@ -474,6 +474,25 @@ impl std::fmt::Display for PresentMonVersion {
     }
 }
 
+/// `ERROR_RESOURCE_TYPE_NOT_FOUND` as returned by `GetLastError` when an
+/// executable carries no version resource. Observed on the genuine signed
+/// PresentMon 2.6.0 binary (980,320 bytes): version detection must treat this
+/// as "unknown", never as evidence for or against the 2.x matrix.
+const ERROR_RESOURCE_TYPE_NOT_FOUND: u32 = 1813;
+
+/// Maps a version-resource API failure to `UnknownVersion` only for
+/// `ERROR_RESOURCE_TYPE_NOT_FOUND` (1813: the file carries no version
+/// resource). Any other code stays a hard `Api` error; in particular,
+/// non-executable input surfaces 1812 (`ERROR_RESOURCE_DATA_NOT_FOUND`) and
+/// must keep failing closed.
+fn version_api_error(api: &'static str, code: u32) -> PresentMonVersionError {
+    if code == ERROR_RESOURCE_TYPE_NOT_FOUND {
+        PresentMonVersionError::UnknownVersion { api, code }
+    } else {
+        PresentMonVersionError::Api { api, code }
+    }
+}
+
 /// Errors raised while reading the PresentMon executable version resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum PresentMonVersionError {
@@ -481,6 +500,15 @@ pub enum PresentMonVersionError {
     #[error("{api} failed with Windows error code {code}")]
     Api {
         /// Windows API that failed.
+        api: &'static str,
+        /// Error code returned by GetLastError.
+        code: u32,
+    },
+    /// The executable carries no version resource, so its version is unknown
+    /// (distinct from a detected-but-unsupported version).
+    #[error("PresentMon version is unknown ({api} failed with Windows error code {code})")]
+    UnknownVersion {
+        /// Windows API that reported the missing resource.
         api: &'static str,
         /// Error code returned by GetLastError.
         code: u32,
@@ -517,11 +545,9 @@ pub fn detect_presentmon_version(
     // SAFETY: `wide` is a null-terminated UTF-16 path owned by this stack frame and `handle` is a valid out-pointer.
     let size = unsafe { GetFileVersionInfoSizeW(wide.as_ptr(), &mut handle) };
     if size == 0 {
-        return Err(PresentMonVersionError::Api {
-            api: "GetFileVersionInfoSizeW",
-            // SAFETY: GetLastError reads the calling thread error state and has no pointer requirements.
-            code: unsafe { GetLastError() },
-        });
+        // SAFETY: GetLastError reads the calling thread error state and has no pointer requirements.
+        let code = unsafe { GetLastError() };
+        return Err(version_api_error("GetFileVersionInfoSizeW", code));
     }
 
     let mut data = vec![0_u8; size as usize];
@@ -535,11 +561,9 @@ pub fn detect_presentmon_version(
         )
     };
     if ok == 0 {
-        return Err(PresentMonVersionError::Api {
-            api: "GetFileVersionInfoW",
-            // SAFETY: GetLastError reads the calling thread error state and has no pointer requirements.
-            code: unsafe { GetLastError() },
-        });
+        // SAFETY: GetLastError reads the calling thread error state and has no pointer requirements.
+        let code = unsafe { GetLastError() };
+        return Err(version_api_error("GetFileVersionInfoW", code));
     }
 
     let root = [92_u16, 0_u16];
@@ -1434,6 +1458,85 @@ mod tests {
             }
             .is_supported()
         );
+    }
+
+    #[test]
+    fn unknown_version_maps_only_resource_type_not_found() {
+        assert_eq!(
+            super::version_api_error("GetFileVersionInfoSizeW", 1813),
+            super::PresentMonVersionError::UnknownVersion {
+                api: "GetFileVersionInfoSizeW",
+                code: 1813,
+            }
+        );
+        assert_eq!(
+            super::version_api_error("GetFileVersionInfoW", 1813),
+            super::PresentMonVersionError::UnknownVersion {
+                api: "GetFileVersionInfoW",
+                code: 1813,
+            }
+        );
+        // 1812 (non-executable input) and unrelated codes stay hard errors.
+        assert!(matches!(
+            super::version_api_error("GetFileVersionInfoSizeW", 1812),
+            super::PresentMonVersionError::Api { .. }
+        ));
+        assert!(matches!(
+            super::version_api_error("GetFileVersionInfoSizeW", 2),
+            super::PresentMonVersionError::Api { .. }
+        ));
+    }
+
+    #[test]
+    fn versionless_pe_reports_unknown_version() -> Result<(), Box<dyn std::error::Error>> {
+        // Cargo-built executables carry no version resource under the pinned
+        // toolchain (verified via FileVersionInfo on target/debug/rwp.exe),
+        // so the test binary itself is a genuine versionless PE.
+        let path = std::env::current_exe()?;
+        match super::detect_presentmon_version(&path) {
+            Err(super::PresentMonVersionError::UnknownVersion { api, code }) => {
+                assert_eq!(api, "GetFileVersionInfoSizeW");
+                assert_eq!(code, super::ERROR_RESOURCE_TYPE_NOT_FOUND);
+            }
+            other => panic!("versionless PE must report UnknownVersion, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn non_executable_file_stays_hard_error() -> Result<(), Box<dyn std::error::Error>> {
+        let path =
+            std::env::temp_dir().join(format!("rwp-versionless-probe-{}.exe", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, b"synthetic file without a version resource")?;
+        let result = super::detect_presentmon_version(&path);
+        let _ = std::fs::remove_file(&path);
+        match result {
+            Err(super::PresentMonVersionError::Api { code, .. }) => {
+                assert_ne!(code, super::ERROR_RESOURCE_TYPE_NOT_FOUND);
+            }
+            other => panic!("non-executable input must stay a hard Api error, got {other:?}"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_and_unsupported_version_errors_differ() {
+        let unknown = super::PresentMonVersionError::UnknownVersion {
+            api: "GetFileVersionInfoSizeW",
+            code: super::ERROR_RESOURCE_TYPE_NOT_FOUND,
+        };
+        assert!(unknown.to_string().contains("unknown"));
+        assert!(!unknown.to_string().contains("unsupported"));
+        let unsupported = super::PresentMonVersionError::UnsupportedVersion {
+            detected: super::PresentMonVersion {
+                major: 1,
+                minor: 9,
+                patch: 0,
+                build: 0,
+            },
+        };
+        assert!(unsupported.to_string().contains("unsupported"));
     }
 
     #[test]

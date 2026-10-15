@@ -277,6 +277,21 @@ pub enum SessionError {
     Persistence(#[from] crate::persistence::PersistenceError),
 }
 
+/// Returns an unknown-version session warning when the PresentMon executable
+/// carries no version resource, so version-unknown captures stay provenanced
+/// without failing. Returns `None` for detected versions and for unrelated
+/// detection failures.
+fn presentmon_version_warning(executable: &std::path::Path) -> Option<TelemetryWarning> {
+    match rwp_system::detect_presentmon_version(executable) {
+        Err(rwp_system::PresentMonVersionError::UnknownVersion { .. }) => Some(TelemetryWarning {
+            message: String::from(
+                "PresentMon version is unknown (no version resource); SHA-256 recorded in manifest; CSV schema gate applies",
+            ),
+        }),
+        _ => None,
+    }
+}
+
 /// Blocking Windows session runner.
 ///
 /// The runner owns the capture lifecycle; the UI only observes its result.
@@ -323,6 +338,9 @@ impl SessionRunner {
         let process = runner.start(&presentmon_config)?;
         let mut system_samples = Vec::new();
         let mut telemetry_warnings = Vec::new();
+        if let Some(warning) = presentmon_version_warning(&config.presentmon_executable) {
+            telemetry_warnings.push(warning);
+        }
 
         let mut capture_context = CaptureContext {
             parser: &parser,
@@ -538,6 +556,34 @@ mod tests {
             }
             Ok(SystemSample::new(1_000_000))
         }
+    }
+
+    #[test]
+    fn versionless_executable_yields_session_warning() -> Result<(), Box<dyn std::error::Error>> {
+        // The test binary itself is a genuine versionless PE under the
+        // pinned toolchain, so it exercises the positive warning path.
+        let warning = super::presentmon_version_warning(&std::env::current_exe()?);
+        let warning = warning.ok_or("versionless executable must yield a warning")?;
+        assert!(warning.message.contains("unknown"));
+        assert!(warning.message.contains("SHA-256"));
+
+        // Non-executable and missing inputs stay warning-free (fail-closed).
+        let garbage = std::env::temp_dir().join(format!(
+            "rwp-session-versionless-{}.exe",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&garbage);
+        std::fs::write(&garbage, b"synthetic file without a version resource")?;
+        assert!(super::presentmon_version_warning(&garbage).is_none());
+        let _ = std::fs::remove_file(&garbage);
+
+        let missing = std::env::temp_dir().join(format!(
+            "rwp-session-versionless-missing-{}.exe",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&missing);
+        assert!(super::presentmon_version_warning(&missing).is_none());
+        Ok(())
     }
 
     #[test]

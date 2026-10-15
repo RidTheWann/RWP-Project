@@ -10,7 +10,8 @@ No user-facing changes yet since `0.2.0-alpha`.
 ## Known issues (unreleased tree)
 
 - Live-capture validation on reference hardware with real PresentMon v2
-  (GUI and `rwp capture` CLI: `doctor` with a versioned executable, timed
+  (GUI and `rwp capture` CLI: `doctor` with a versioned or version-unknown
+  executable (SHA-256 recorded), timed
   capture, `analyze` → `report --format md` → two-session `compare
   --same-scenario`, manifest hashes, Ctrl+C/no-orphan check) remains
   `BLOCKED_ON_USER`. Synthetic fixtures prove tooling only.

@@ -29,6 +29,7 @@ const SAFE_EVENTS: &[&str] = &[
     "session_worker_started",
     "session_stop_requested",
     "presentmon_kill_fallback",
+    "presentmon_version_unknown",
     "session_completed",
     "session_failed",
 ];
@@ -426,10 +427,11 @@ mod tests {
     fn event_allowlist_discards_unknown_or_sensitive_values() {
         assert!(safe_event("session_start_requested").is_some());
         assert!(safe_event("presentmon_kill_fallback").is_some());
+        assert!(safe_event("presentmon_version_unknown").is_some());
         assert!(safe_event("C:\\Users\\private\\capture.csv").is_none());
         assert!(safe_event("session_start_requested C:\\Users\\private").is_none());
         assert!(safe_event("unknown").is_none());
-        assert_eq!(SAFE_EVENTS.len(), 8);
+        assert_eq!(SAFE_EVENTS.len(), 9);
     }
 
     #[test]

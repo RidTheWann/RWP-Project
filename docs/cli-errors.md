@@ -18,7 +18,7 @@ Successful command output is unchanged by `--json`; the flag only changes failur
 |---|---:|---|---|
 | RWP-E1000 | 10 | Filesystem I/O | Check the referenced path, permissions, and storage. |
 | RWP-E2000 | 20 | PresentMon configuration | Check executable path, target PID, output path, and capture options. |
-| RWP-E2100 | 21 | PresentMon process lifecycle | Verify permissions, executable validity, lifecycle state, and stderr. |
+| RWP-E2100 | 21 | PresentMon process lifecycle | Verify permissions, executable validity, lifecycle state, and stderr. A detected non-2.x PresentMon version is refused here; a version-unknown binary (no version resource) proceeds with a warning instead. |
 | RWP-E2200 | 22 | PresentMon CSV normalization | Validate CSV schema, timestamps, target PID, and resource limits. |
 | RWP-E3000 | 30 | Report/analysis serialization | Check report/capture schema compatibility. |
 | RWP-E4000 | 40 | Diagnostic engine | Review thresholds and provide sufficient observations. |

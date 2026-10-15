@@ -40,6 +40,9 @@
 - ADR-0028 PresentMon distribution and verification: accepted
 - ADR-0029 WebView2 runtime install mode: accepted
 - ADR-0030 no automatic updates: accepted
+- ADR-0031 `rwp capture` CLI on the shared session orchestrator: accepted
+- ADR-0032 graceful PresentMon stop without a caller console: accepted
+- ADR-0035 unknown PresentMon version (amends ADR-0016): accepted
 
 ## M1 completion
 

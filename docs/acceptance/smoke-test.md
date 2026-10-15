@@ -123,7 +123,9 @@ Expected: three `SELFCHECK sample:` lines plus
 
 ```markdown
 - <date> Owner smoke test (real PresentMon): `rwp doctor --presentmon <path>`
-  EXIT <code> (presentmon major_version=<v> supported=<bool>); PresentMon
+  EXIT <code> (presentmon major_version=<v> supported=<bool>; both null when
+  the binary carries no version resource — version-unknown is advisory, not
+  a failure); PresentMon
   SHA256 `<hash>`; rwp binary SHA256 `<hash>`.
 - `import-presentmon <csv> --process-id <pid> --qpc-frequency-hz <hz>`
   EXIT <code> -> <session-dir> (manifest SHA256 `<hash>`).

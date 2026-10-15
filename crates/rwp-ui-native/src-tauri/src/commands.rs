@@ -706,6 +706,10 @@ pub fn remediation_for(message: &str) -> Option<&'static str> {
             "worker",
             "The capture worker failed to start; restart the application and retry.",
         ),
+        (
+            "unsupported PresentMon version",
+            "Use PresentMon 2.x; a version-unknown binary (no version resource) is accepted with its SHA-256 recorded, but a detected non-2.x version is refused.",
+        ),
     ];
     rules
         .iter()
@@ -1086,6 +1090,101 @@ mod audit_regressions {
         );
     }
 
+    fn granted_commands(permissions: &str, identifier: &str) -> Vec<String> {
+        let Some(block) = permissions.split("[[permission]]").skip(1).find(|block| {
+            block.lines().any(|line| {
+                line.trim()
+                    .strip_prefix("identifier = \"")
+                    .and_then(|rest| rest.strip_suffix('"').map(|name| name == identifier))
+                    == Some(true)
+            })
+        }) else {
+            return Vec::new();
+        };
+        quoted_items_after(block, "commands.allow = [")
+    }
+
+    /// Pins the Tauri runtime ACL resolution rule
+    /// (`acl::resolved::get_permissions` in the pinned tauri-utils): a
+    /// capability entry literally named `default` resolves through the
+    /// manifest's default permission *set*, never through a `[[permission]]
+    /// identifier = "default"` entry, so such an entry grants nothing and
+    /// every command is denied at runtime with "not allowed by ACL".
+    #[test]
+    fn capability_grants_resolve_to_registered_commands() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))?;
+        let entries: Vec<String> = capability
+            .get("permissions")
+            .and_then(|value| value.as_array())
+            .ok_or("capability must list permissions")?
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_owned))
+            .collect();
+
+        let permissions = include_str!("../permissions/default.toml");
+        let has_default_set = permissions.lines().any(|line| line.trim() == "[default]");
+        let permission_identifiers: Vec<String> = permissions
+            .split("[[permission]]")
+            .skip(1)
+            .filter_map(|block| {
+                block.lines().find_map(|line| {
+                    line.trim()
+                        .strip_prefix("identifier = \"")
+                        .and_then(|rest| rest.strip_suffix('"'))
+                        .map(str::to_owned)
+                })
+            })
+            .collect();
+
+        for entry in &entries {
+            if entry.contains(':') {
+                continue; // plugin-scoped entries resolve in their own manifest
+            }
+            if entry == "default" {
+                assert!(
+                    has_default_set,
+                    "capability entry \"default\" resolves through the default permission set, which permissions/default.toml does not define"
+                );
+            } else {
+                assert!(
+                    permission_identifiers.iter().any(|id| id == entry),
+                    "capability entry {entry:?} has no matching [[permission]] identifier"
+                );
+            }
+        }
+
+        // Every command the frontend invokes must be granted by one of the
+        // resolved permissions; otherwise it fails with "not allowed by ACL".
+        let frontend = include_str!("../../web/app.js");
+        let mut invoked = Vec::new();
+        let mut rest = frontend;
+        while let Some((_, tail)) = rest.split_once("invoke(\"") {
+            if let Some((name, tail)) = tail.split_once('"') {
+                invoked.push(name.to_owned());
+                rest = tail;
+            } else {
+                break;
+            }
+        }
+        assert!(
+            !invoked.is_empty(),
+            "frontend invoke scan must find commands"
+        );
+        let granted: Vec<String> = permission_identifiers
+            .iter()
+            .flat_map(|id| granted_commands(permissions, id))
+            .collect();
+        for command in invoked {
+            assert!(
+                granted.iter().any(|grant| grant == &command),
+                "frontend invokes {command:?} but no resolved permission grants it"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn stable_notification_defaults_on_and_deserializes() -> Result<(), Box<dyn std::error::Error>>
     {
@@ -1219,6 +1318,10 @@ mod audit_regressions {
             (
                 "process_id must be greater than zero",
                 "PID 0 is never valid",
+            ),
+            (
+                "unsupported PresentMon version 1.9.0; supported major version is 2.x",
+                "PresentMon 2.x",
             ),
             ("a capture session is already running", "Stop or reset"),
             (

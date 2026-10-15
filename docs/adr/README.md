@@ -34,6 +34,7 @@ Accepted and reconstructed decisions currently relevant to implementation:
 - ADR-0030: no automatic updates
 - ADR-0031: `rwp capture` CLI on the shared session orchestrator
 - ADR-0032: graceful PresentMon stop without a caller console (amends ADR-0015)
+- ADR-0035: unknown PresentMon version (amends ADR-0016)
 
 ADR-0001..0008 and ADR-0011..0013 are reconstructed from the project ledger and implementation contracts; reconstruction status is explicit in each record.
 

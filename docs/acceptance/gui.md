@@ -52,6 +52,7 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 ## IPC/security
 
 - [ ] Webview can invoke only the registered session commands.
+- [ ] Status/history polling shows live data, never "not allowed by ACL" or a stuck IPC ERROR badge.
 - [ ] No shell/filesystem/network/updater capability is granted to the main window.
 - [ ] Backend rejects invalid numeric/path inputs independently of UI validation.
 - [ ] CSP blocks unintended external resource loading.

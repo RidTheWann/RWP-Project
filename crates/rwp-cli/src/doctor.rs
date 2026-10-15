@@ -234,6 +234,20 @@ fn presentmon_version(path: &Path, checks: &mut Vec<DoctorCheck>) -> (Option<u16
             });
             (Some(version.major), Some(supported))
         }
+        // Binaries without a version resource (observed on genuine PresentMon
+        // 2.6.0) are version-unknown, not unsupported: advisory only, with the
+        // SHA-256 recorded in session provenance and the v2 CSV schema gate
+        // still rejecting non-v2 output.
+        Err(rwp_system::PresentMonVersionError::UnknownVersion { .. }) => {
+            checks.push(DoctorCheck {
+                id: "presentmon.version",
+                ok: None,
+                detail: String::from(
+                    "PresentMon version is unknown (no version resource); SHA-256 recorded in manifest; CSV schema gate applies",
+                ),
+            });
+            (None, None)
+        }
         Err(error) => {
             checks.push(DoctorCheck {
                 id: "presentmon.version",
@@ -398,6 +412,37 @@ mod tests {
         assert!(fs::read_to_string(&path)?.contains("rwp.doctor.v1"));
         assert!(write_bundle(&path, &report).is_err());
         fs::remove_file(path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn versionless_presentmon_is_advisory_not_failure() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = std::env::temp_dir().join(format!("rwp-doctor-noversion-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir)?;
+        // The test binary itself is a genuine versionless PE under the
+        // pinned toolchain; copying it satisfies the basename validation
+        // while preserving the absent version resource.
+        let path = dir.join("PresentMon.exe");
+        fs::copy(std::env::current_exe()?, &path)?;
+
+        let report = run(Some(&path));
+        let presentmon = report.presentmon.ok_or("presentmon section missing")?;
+        assert!(presentmon.executable_valid);
+        let version = report
+            .checks
+            .iter()
+            .find(|check| check.id == "presentmon.version")
+            .ok_or("version check missing")?;
+        if cfg!(windows) {
+            assert_eq!(version.ok, None);
+            assert_eq!(presentmon.major_version, None);
+            assert_eq!(presentmon.supported_version, None);
+            assert!(version.detail.contains("unknown"));
+        } else {
+            assert_eq!(version.ok, None);
+        }
+        fs::remove_dir_all(dir)?;
         Ok(())
     }
 

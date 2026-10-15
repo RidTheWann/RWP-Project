@@ -9,7 +9,7 @@ This document covers the trust boundaries and untrusted inputs used by RWP v1.0 
 | Boundary | Trusted side | Untrusted side | Required property |
 |---|---|---|---|
 | Tauri webview → backend | Rust application commands | Web UI input | Capability-scoped IPC; validate every path and numeric field server-side. |
-| PresentMon executable | RWP process supervisor | User-supplied external executable | Require a canonical regular file named `PresentMon.exe`; verify supported version before capture; contain the child in a kill-on-close Job Object. |
+| PresentMon executable | RWP process supervisor | User-supplied external executable | Require a canonical regular file named `PresentMon.exe`; verify supported-or-unknown version before capture (unknown recorded with SHA-256, CSV schema gate applies); contain the child in a kill-on-close Job Object. |
 | PresentMon CSV → parser | Normalized internal frame model | CSV file contents, quoting, headers, metrics, timestamps | Strict parsing, monotonic timestamp validation, bounded resource use, no panic on arbitrary input. |
 | Persisted session → loader | Verified manifest and file hashes | Session directory contents | Verify manifest hashes before consuming capture/report/telemetry data. |
 | JSON report → renderer | Typed report model | JSON file contents | Deserialize through the versioned model; unknown or missing observations remain absent rather than sentinel values. |
