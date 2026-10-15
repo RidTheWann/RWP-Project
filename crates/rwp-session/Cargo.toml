@@ -11,12 +11,12 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-rwp-analysis = { version = "0.2.0", path = "../rwp-analysis" }
-rwp-capture = { version = "0.2.0", path = "../rwp-capture" }
-rwp-core = { version = "0.2.0", path = "../rwp-core" }
-rwp-diagnostics = { version = "0.2.0", path = "../rwp-diagnostics" }
-rwp-report = { version = "0.2.0", path = "../rwp-report" }
-rwp-system = { version = "0.2.0", path = "../rwp-system" }
+rwp-analysis = { version = "0.3.0", path = "../rwp-analysis" }
+rwp-capture = { version = "0.3.0", path = "../rwp-capture" }
+rwp-core = { version = "0.3.0", path = "../rwp-core" }
+rwp-diagnostics = { version = "0.3.0", path = "../rwp-diagnostics" }
+rwp-report = { version = "0.3.0", path = "../rwp-report" }
+rwp-system = { version = "0.3.0", path = "../rwp-system" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

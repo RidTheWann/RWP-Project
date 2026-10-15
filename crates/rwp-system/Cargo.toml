@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-rwp-core = { version = "0.2.0", path = "../rwp-core" }
+rwp-core = { version = "0.3.0", path = "../rwp-core" }
 thiserror.workspace = true
 tracing.workspace = true
 nvml-wrapper.workspace = true

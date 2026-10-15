@@ -10,6 +10,10 @@ Entry format: one bullet per user-facing change under
 
 ## Unreleased
 
+No user-facing changes yet since `0.3.0-alpha`.
+
+## [0.3.0-alpha] - 2026-10-16
+
 ### Fixed
 - Accept PresentMon executables without a Windows version resource (observed on genuine PresentMon 2.6.0) as version-unknown instead of refusing capture: `start()` proceeds with a logged warning, the session records a telemetry warning with the executable SHA-256 in the manifest, and `rwp doctor` reports the version check as advisory; detected non-2.x versions are still refused and non-v2 CSV output is still rejected by the schema gate.
 - Fix GUI IPC denial ("Command ... not allowed by ACL" with a stuck IPC ERROR badge): the main capability referenced a `default` permission that the Tauri runtime resolves through the default permission *set*, which did not exist, so every session command was denied; the capability now references the `session-commands` permission that actually lists the 11 registered commands.

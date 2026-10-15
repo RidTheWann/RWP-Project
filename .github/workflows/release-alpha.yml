@@ -117,6 +117,30 @@ jobs:
           Get-Content "$bundle/SHA256SUMS"
           Get-ChildItem -LiteralPath $bundle | Select-Object Name, Length
 
+      # The GitHub Release body carries the CHANGELOG.md section for the
+      # pushed tag verbatim, so the published notes never drift from the
+      # tree. Derives the section from the tag name (vX.Y.Z-alpha ->
+      # ## [X.Y.Z-alpha]); manual dispatch runs keep a placeholder so the
+      # dry-run stays green without publishing.
+      - name: Extract release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          $notes = Get-Content -LiteralPath CHANGELOG.md -Encoding utf8
+          $start = -1
+          $end = $notes.Count
+          for ($i = 0; $i -lt $notes.Count; $i++) {
+            if ($start -lt 0 -and $notes[$i].StartsWith("## [$version]")) { $start = $i }
+            elseif ($start -ge 0 -and $notes[$i] -match '^## ') { $end = $i; break }
+          }
+          if ($start -lt 0) {
+            "# Dry-run notes (no CHANGELOG section for [$version] on this ref)." | Set-Content -Path release-body.md -Encoding utf8
+          } else {
+            $notes[$start..($end - 1)] | Set-Content -Path release-body.md -Encoding utf8
+          }
+          Get-Content -LiteralPath release-body.md
+
       - name: Publish GitHub pre-release
         # Tag-only: workflow_dispatch dry-runs stop before publishing.
         if: github.ref_type == 'tag'
@@ -126,6 +150,7 @@ jobs:
         with:
           prerelease: true
           generate_release_notes: false
+          body_path: release-body.md
           files: |
             target/release/bundle/nsis/*setup.exe
             target/release/bundle/nsis/SHA256SUMS

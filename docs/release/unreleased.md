@@ -1,11 +1,11 @@
-# Unreleased (post-0.2.0-alpha)
+# Unreleased (post-0.3.0-alpha)
 
-Version `0.2.0` in tree (`0.2.0-alpha` released as GitHub pre-release; `0.1.0-alpha` record frozen). User-facing changes accumulate in `CHANGELOG.md` under
+Version `0.3.0` in tree (`0.3.0-alpha` released as GitHub pre-release; `0.1.0-alpha` and `0.2.0-alpha` records frozen). User-facing changes accumulate in `CHANGELOG.md` under
 `## Unreleased`; this note tracks known issues for the unreleased tree.
 
-## New since 0.2.0-alpha
+## New since 0.3.0-alpha
 
-No user-facing changes yet since `0.2.0-alpha`.
+No user-facing changes yet since `0.3.0-alpha`.
 
 ## Known issues (unreleased tree)
 
@@ -30,4 +30,4 @@ No user-facing changes yet since `0.2.0-alpha`.
 
 Provenance: local gate on the pinned 1.99.0 toolchain (`docs/local-gates.md`);
 per-batch outputs in `docs/autopilot/STATE.md`. Release history:
-`0.1.0-alpha.md`, `0.2.0-alpha.md`; no version bump for unreleased work.
+`0.1.0-alpha.md`, `0.2.0-alpha.md`, `0.3.0-alpha.md`; no version bump for unreleased work.

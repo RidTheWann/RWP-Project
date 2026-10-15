@@ -6,7 +6,10 @@ Release notes for the second alpha: `0.2.0-alpha.md` (tag `v0.2.0-alpha`;
 installer built and published automatically by
 `.github/workflows/release-alpha.yml`).
 
-Unreleased tree (post-`0.2.0-alpha`, version `0.2.0` in tree): `unreleased.md`.
+Release notes for the third alpha: `0.3.0-alpha.md` (tag `v0.3.0-alpha`;
+same automation; the release body carries the CHANGELOG section).
+
+Unreleased tree (post-`0.3.0-alpha`, version `0.3.0` in tree): `unreleased.md`.
 
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.
