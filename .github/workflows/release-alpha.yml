@@ -1,0 +1,112 @@
+# Release alpha — NSIS installer + SHA256SUMS as a GitHub pre-release.
+#
+# Trigger: push a tag matching `v*-alpha*` (e.g. `v0.2.0-alpha`).
+# The existing `v0.1.0-alpha` GitHub pre-release stays frozen; this workflow
+# only ever creates/updates the pushed tag, never `main` history.
+#
+# Design notes (see `docs/release/README.md`, ADR-0029/0030):
+# - Offline NSIS bundle only (`tauri.conf.json`: `targets: ["nsis"]`,
+#   `webviewInstallMode: offlineInstaller`). Unsigned: SmartScreen
+#   "unknown publisher" is expected until a signing certificate exists.
+# - No `tauri-action`: it defaults to updater JSON, but auto-update is OFF
+#   by design — build with `cargo tauri` directly instead.
+# - Full gates run first on the tag so a red tree never ships.
+# - SBOM/licenses/provenance stay local (SBOM embeds absolute paths and is
+#   never committed); the workflow records the installer SHA-256 and the
+#   `tauri-cli` version in the release body instead.
+# - PresentMon is never bundled or downloaded (ADR-0028, user-supplied only).
+
+name: Release alpha
+
+on:
+  push:
+    tags:
+      - "v*-alpha*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build + publish alpha pre-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.99.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Gates (same order as local-gates.md)
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo test --workspace --all-features --locked
+
+      - name: Install gate tools
+        run: |
+          cargo install cargo-deny --locked --version 0.20.2
+          cargo install cargo-audit --locked --version 0.22.2
+
+      - name: Dependency policy + audit
+        run: |
+          cargo deny check
+          cargo audit
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Schemas, docs, links
+        run: |
+          pip install jsonschema
+          python tools/validate_schemas.py
+          python tools/check_docs.py
+          python -m unittest discover -s tools
+          python tools/check_links.py
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Record Tauri CLI version
+        run: |
+          cargo tauri --version | Tee-Object -FilePath tauri-cli-version.txt
+          Get-Content tauri-cli-version.txt
+
+      - name: Build NSIS bundle
+        working-directory: crates/rwp-ui-native/src-tauri
+        run: cargo tauri build --bundles nsis
+
+      - name: SHA256SUMS
+        run: |
+          $bundle = "crates/rwp-ui-native/src-tauri/target/release/bundle/nsis"
+          $exes = Get-ChildItem -LiteralPath $bundle -Filter "*setup.exe"
+          if ($exes.Count -eq 0) { throw "no NSIS setup.exe found in $bundle" }
+          $lines = foreach ($exe in $exes) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLower()
+            "$hash  $($exe.Name)"
+          }
+          $lines | Set-Content -Path "$bundle/SHA256SUMS" -Encoding ascii
+          Get-Content "$bundle/SHA256SUMS"
+          Get-ChildItem -LiteralPath $bundle | Select-Object Name, Length
+
+      - name: Publish GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: false
+          files: |
+            crates/rwp-ui-native/src-tauri/target/release/bundle/nsis/*setup.exe
+            crates/rwp-ui-native/src-tauri/target/release/bundle/nsis/SHA256SUMS
+            tauri-cli-version.txt

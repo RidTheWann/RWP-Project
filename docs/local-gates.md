@@ -1,10 +1,13 @@
 # Local Gates — Otoritas Verifikasi Pengganti CI (Fase 0)
 
-Status: MENGIKAT sejak Fase 0. Tidak ada GitHub Actions workflow di repo
-(`.github/` absent, verified 2026-10-12); remote GitHub dipakai untuk publish
-saja (branch `main` + tag `v0.1.0-alpha`, atas perintah owner). Gate lokal di
-bawah adalah satu-satunya otoritas verifikasi; tidak ada CI yang
-menggantikannya.
+Status: MENGIKAT sejak Fase 0. Sejak 2026-10-16 repo memiliki workflow
+`.github/workflows/` (`ci.yml` gates + debug build per push/PR ke `main`,
+`release-alpha.yml` NSIS + pre-release hanya pada tag `v*-alpha*`) atas
+perintah owner sebagai suplemen — bukan pengganti. Remote GitHub dipakai
+untuk publish (branch `main` + tag alpha, atas perintah owner). Gate lokal di
+bawah tetap satu-satunya otoritas verifikasi per batch; CI yang merah tidak
+pernah menghalalkan klaim "lolos" tanpa output gate lokal di STATE, dan CI
+yang hijau tidak menggantikan kewajiban gate lokal.
 
 > Catatan 2026-10-12 (revisi kebijakan owner): git dipakai untuk publish —
 > commit/push/tag atas perintah eksplisit owner, di branch `main` saja tanpa

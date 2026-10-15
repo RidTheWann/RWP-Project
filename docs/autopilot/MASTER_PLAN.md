@@ -3,15 +3,17 @@
 > Taruh file ini di repo sebagai `docs/autopilot/MASTER_PLAN.md`. Ini adalah sumber kebenaran rencana.
 > Status pekerjaan ada di `docs/autopilot/STATE.md` (template di §6). Jangan campur keduanya.
 
-## 0. Execution policy (local-first, no branches, no CI)
+## 0. Execution policy (local-first, no branches, CI as supplement)
 
 There is one working tree and no other topology:
 
 - All implementation, fixes, tests, documentation, audits, and release
   preparation happen directly in the tree. Never create branches of any kind.
 - There is no promotion flow, no merge-back, no freeze, no trailers, and no
-  skip markers. CI is retired (`.github/` removed with the remote); the
-  per-batch local gate on the pinned 1.99.0 toolchain is the verification
+  skip markers. Since 2026-10-16 (owner order) `.github/workflows/` holds
+  `ci.yml` (gates + debug build per push/PR) and `release-alpha.yml`
+  (tag-only NSIS pre-release) as a supplement; the per-batch local gate on
+  the pinned 1.99.0 toolchain remains the verification
   (`docs/local-gates.md`).
 - Every batch follows: work (tests first) → full local gate → owner audit →
   record in `docs/autopilot/STATE.md` (+ CHANGELOG only for user-facing
