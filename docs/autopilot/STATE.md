@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-17T02:45:00+07:00
-repo_ref: "main @ 74a4e94; Windows gate + debug build PASS in run 38954772910"
-active_wp: "UX-REDESIGN-0.5.0-beta (follow-up locale/compare/contrast correctness batch committed; verification pending)"
+last_updated: 2026-10-17T02:42:00+07:00
+repo_ref: "main @ 2630ad9; Windows CI gate + debug build PASS in run 38956343967"
+active_wp: "UX-REDESIGN-0.5.0-beta (Windows CI gates + workspace debug build PASS; tag/release publication BLOCKED_ON_TOOL; local gate and packaged smoke UNVERIFIED)"
 ---
 
-## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; Windows gates + debug build PASS on 4ccaf02 (run 38912789000); tag/release publication pending and hardware acceptance remains BLOCKED_ON_USER)
+## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; current main @ 2630ad9 passed Windows gates + debug build in run 38956343967; tag/release publication BLOCKED_ON_TOOL; packaged smoke UNVERIFIED and hardware acceptance remains BLOCKED_ON_USER)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (follow-up locale/compare/contrast correctnes
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-17 verified UI/CI follow-up on `main @ 2630ad96e99fe0fdedcfa132674c8911f19ff249`: GitHub Actions run `38956343967` completed success. Windows gate PASS: fmt; Clippy `-D warnings`; workspace tests 359 passed / 0 failed; `cargo deny check`; `cargo audit`; workflow security; JSON schemas; docs; Python suite 23/23; Markdown links checked 84 documents. Separate Windows debug build `cargo build --locked --workspace` PASS (29.83 s). This run verifies the corrected CSS contrast regex and the fail-fast shell policy for all multi-command CI/release gate steps. Important historical correction: run `38955528150` was falsely reported green because `test_primary_text_and_hover_colors_meet_wcag_aa_contrast` failed (unescaped regex quantifier in an f-string) but the default PowerShell runner continued to `check_links.py` and returned success; commit `2630ad9` fixes the regex, changes those steps to Bash `set -euo pipefail`, and adds regression coverage proving the gate scripts retain fail-fast behavior. These are CI results, not local pinned-toolchain proof; no local checkout/toolchain was available. Tag `v0.5.0-beta` and GitHub release remain absent; current connector cannot write tags/releases. NSIS build, checksum/install/uninstall, packaged GUI smoke, installed notifications/countdown/close and real PresentMon/hardware acceptance remain UNVERIFIED/BLOCKED_ON_USER.
+
 - 2026-10-17 follow-up UI audit (baseline `74a4e941afb6a80e1687fda5368c03b48e8203f2`): run `38954772910` passed Windows gates and debug build. Gates passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow security, schema/docs, Python tools (19 / OK), links, and `cargo build --locked --workspace`. A further review found locale changes could navigate users away from Settings, previous Compare scenario choices could carry to a newly selected pair, and white text on primary hover `#E04A54` measured `3.98:1`. This batch restores the current view, clears scenario confirmation/output on pair changes, darkens hover to `#B72D37`, and adds regression/contrast tests. Its CI remains pending. Local pinned-toolchain gates, installed UI/manual visual checks, NSIS install/uninstall and real PresentMon/hardware capture have not been run here; release tag/release write remains BLOCKED_ON_TOOL.
 
 - 2026-10-17 UI result semantics audit: code fix commit `b70e213a142608e9527fd2ce0c4e200c37d1a61f` changes the stability summary to Stable only when explicit `stability.v1` is present; all other outcomes are Unknown. Missing frame_count/stutters now render as unavailable instead of fabricated zero. Regression test added in `tools/test_ui_contract.py` (commit `135d34be09f7ac7864cd826e6fe654fa1ee05673`) and changelog updated (commit `6ba913e3efffd7de4d3694770c352f5f7bb63039`). CI run `38954719859` is queued/pending on current main and must be checked; prior full Windows gate + workspace debug build PASS was run `38914012381` on parent code head `322e538`, before this correctness fix. Local pinned Rust toolchain/gates are not available in this execution (no checkout/toolchain), so CI remains supplemental rather than a claim of local verification. Release tag/pre-release remains BLOCKED_ON_TOOL: the available GitHub tool set has no tag/release write action. Package install/uninstall, installed GUI, notifications/countdown/window-close and real PresentMon hardware validation remain UNVERIFIED/BLOCKED_ON_USER.
@@ -122,7 +124,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (follow-up locale/compare/contrast correctnes
 
 ## NEXT
 
-Inspect the Windows gates and debug build for the latest locale/compare/contrast batch; fix any regression from exact CI output and rerun the gates. Then resume release packaging review. Publication remains BLOCKED_ON_TOOL because the available GitHub connector has no create-tag/release action; do not create a branch to fake a tag. Local pinned-toolchain gates, NSIS/install/uninstall, packaged GUI smoke, and real PresentMon/hardware acceptance remain unverified.
+Do a final read-only release-state audit: confirm no `v0.5.0-beta` tag/release exists, and continue reconciling the release workflow, notes, and artifact contract. Publication is BLOCKED_ON_TOOL because this GitHub connector cannot create/push a tag or publish a release; do not create a branch or claim a simulated publication. Local pinned-toolchain gates, NSIS/SHA256SUMS, install/uninstall, packaged GUI smoke, installed native notifications and real PresentMon/hardware acceptance remain unverified or BLOCKED_ON_USER.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.

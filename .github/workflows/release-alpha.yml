@@ -1,6 +1,6 @@
 # Release alpha/beta — NSIS installer + SHA256SUMS as a GitHub pre-release.
 #
-# Trigger: push a tag matching `v*-alpha*` or `v*-beta*` (e.g. `v0.4.0-beta`),
+# Trigger: push a tag matching `v*-alpha*` or `v*-beta*` (e.g. `v0.5.0-beta`),
 # or manual `workflow_dispatch` for a build-only dry-run (publish step is
 # tag-only).
 # The existing `v0.1.0-alpha` GitHub pre-release stays frozen; this workflow
@@ -18,7 +18,7 @@
 #   `tauri-cli` version in the release body instead.
 # - PresentMon is never bundled or downloaded (ADR-0028, user-supplied only).
 
-name: Release alpha
+name: Release alpha/beta
 
 on:
   push:
@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build + publish alpha pre-release
+    name: Build + publish alpha/beta pre-release
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
       # workspace, so the bundle lands in the workspace-root `target/`, NOT
       # in `crates/rwp-ui-native/src-tauri/target/` (run #2 failed here).
       # NOTE: the NSIS bundle file carries spaces
-      # (e.g. `RidTheWann Performance_0.4.0_x64-setup.exe`) while the published
+      # (e.g. `RidTheWann Performance_0.5.0-beta_x64-setup.exe`) while the published
       # GitHub asset uses dots, so rename first: the SHA256SUMS entry must
       # match the uploaded asset name exactly or `sha256sum -c` fails.
       - name: SHA256SUMS

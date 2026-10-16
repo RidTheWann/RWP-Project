@@ -11,7 +11,7 @@ same automation; the release body carries the CHANGELOG section).
 
 Release notes for the first beta: `0.4.0-beta.md` (tag `v0.4.0-beta`; same automation).
 
-Release candidate notes for the next beta: `0.5.0-beta.md` (target tag `v0.5.0-beta`; the current manifest bump and candidate gates are in progress; the tag/release is not yet published).
+Release candidate notes for the next beta: `0.5.0-beta.md` (target tag `v0.5.0-beta`; Windows CI gates and the debug workspace build passed on `main` in run `38956343967`; the tag/release is not yet published, and local pinned-toolchain gates plus packaged install/GUI smoke remain unverified).
 
 Unreleased notes and known limits: `unreleased.md`.
 
