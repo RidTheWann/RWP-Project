@@ -777,16 +777,9 @@ pub fn session_preflight(
     process_id: Option<u32>,
 ) -> SessionPreflight {
     let permission_ready = capture_permission_ready();
-    let component_ready = presentmon_executable.as_deref().is_some_and(|value| {
-        let path = Path::new(value);
-        path.is_absolute()
-            && path.file_name().is_some_and(|name| {
-                name.to_string_lossy()
-                    .eq_ignore_ascii_case("PresentMon.exe")
-            })
-            && path.metadata().is_ok_and(|metadata| metadata.is_file())
-            && path.canonicalize().is_ok()
-    });
+    let component_ready = presentmon_executable
+        .as_deref()
+        .is_some_and(|value| component_file_ready(Path::new(value)));
     let process_ready = process_id.is_some_and(|target| {
         target > 0
             && rwp_system::list_processes()
@@ -797,6 +790,38 @@ pub fn session_preflight(
         component_ready,
         process_ready,
     }
+}
+
+#[cfg(windows)]
+fn component_version_supported(
+    version: Result<rwp_system::PresentMonVersion, rwp_system::PresentMonVersionError>,
+) -> bool {
+    match version {
+        Ok(version) => version.is_supported(),
+        Err(rwp_system::PresentMonVersionError::UnknownVersion { .. }) => true,
+        Err(_) => false,
+    }
+}
+
+#[cfg(windows)]
+fn component_file_ready(path: &Path) -> bool {
+    if !path.is_absolute()
+        || !path.file_name().is_some_and(|name| {
+            name.to_string_lossy().eq_ignore_ascii_case("PresentMon.exe")
+        })
+        || !path.metadata().is_ok_and(|metadata| metadata.is_file())
+        || path.canonicalize().is_err()
+    {
+        return false;
+    }
+    // ADR-0028 allows a user-supplied executable with no version resource;
+    // capture provenance still records the executable SHA-256.
+    component_version_supported(rwp_system::detect_presentmon_version(path))
+}
+
+#[cfg(not(windows))]
+fn component_file_ready(_path: &Path) -> bool {
+    false
 }
 
 #[cfg(windows)]
@@ -1041,6 +1066,31 @@ pub fn session_reset(manager: State<'_, SessionManager>) -> Result<SessionSnapsh
 #[cfg(test)]
 mod audit_regressions {
     use super::{SessionManager, SessionSnapshot, fail_session_worker_spawn, run_session_worker};
+
+    #[cfg(windows)]
+    #[test]
+    fn preflight_accepts_unknown_presentmon_version_but_rejects_detected_unsupported_version() {
+        use rwp_system::{PresentMonVersion, PresentMonVersionError};
+
+        assert!(super::component_version_supported(Ok(PresentMonVersion {
+            major: 2,
+            minor: 6,
+            patch: 0,
+            build: 0,
+        })));
+        assert!(!super::component_version_supported(Ok(PresentMonVersion {
+            major: 3,
+            minor: 0,
+            patch: 0,
+            build: 0,
+        })));
+        assert!(super::component_version_supported(Err(
+            PresentMonVersionError::UnknownVersion { api: "test", code: 1813 }
+        )));
+        assert!(!super::component_version_supported(Err(
+            PresentMonVersionError::InvalidResource
+        )));
+    }
 
     #[test]
     fn default_notification_language_is_backward_compatible()

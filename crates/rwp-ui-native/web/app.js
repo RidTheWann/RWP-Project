@@ -166,11 +166,17 @@ function setView(name) {
     view.hidden = !active;
     view.classList.toggle("active", active);
   });
+  const interactionLocked = ["countdown", "recording", "analyzing"].includes(state.flow);
   el.nav.forEach(function(button) {
     const active = button.getAttribute("data-view") === name;
     button.classList.toggle("active", active);
     if (active && button.classList.contains("nav-button")) button.setAttribute("aria-current","page");
     else button.removeAttribute("aria-current");
+    if (button.tagName === "BUTTON") button.disabled = interactionLocked;
+    else {
+      button.setAttribute("aria-disabled", interactionLocked ? "true" : "false");
+      button.tabIndex = interactionLocked ? -1 : 0;
+    }
   });
   if (name === "home") { refreshPreflight(); }
   if (name === "history") { refreshHistory(); }
