@@ -409,13 +409,22 @@ function isStreamingDiagnostic(item) {
 }
 function renderCompleted(snapshot) {
   el.resultSuccess.hidden=false; el.resultFailure.hidden=true;
-  const app=cleanApp(snapshot.application), frameCount=Number(snapshot.frame_count || 0);
-  el.resultMeta.textContent=app+" · "+t("historyFrames",{count:frameCount});
+  const app=cleanApp(snapshot.application);
+  const rawFrameCount = snapshot.frame_count;
+  const frameCount = Number.isSafeInteger(rawFrameCount) && rawFrameCount >= 0
+    ? rawFrameCount
+    : null;
+  el.resultMeta.textContent = app + " · " + (
+    frameCount === null ? t("noData") : t("historyFrames", {count:frameCount})
+  );
   el.resultOutcome.textContent=snapshot.interrupted ? t("resultInterrupted") : t("resultCompleted");
   const dashboard=snapshot.dashboard || {};
-  const allDiagnostics=Array.isArray(dashboard.diagnostics) ? dashboard.diagnostics : [];
-  const diagnostics=allDiagnostics.filter(function(item){return !isStreamingDiagnostic(item);});
-  const stutters=Array.isArray(dashboard.stutters) ? dashboard.stutters : [];
+  const allDiagnostics = Array.isArray(dashboard.diagnostics) ? dashboard.diagnostics : [];
+  const diagnostics = allDiagnostics.filter(function(item) {
+    return !isStreamingDiagnostic(item);
+  });
+  const rawStutters = dashboard.stutters;
+  const stutters = Array.isArray(rawStutters) ? rawStutters : null;
   const primary=diagnostics.length ? diagnostics[0] : {rule_id:"unknown",category:"Unknown"};
   const stable=diagnostics.some(function(item){return item.rule_id==="stability.v1";});
   const copy=diagnosisCopy(primary.rule_id);
@@ -438,13 +447,17 @@ function renderCompleted(snapshot) {
     li.textContent = diagnosisCopy(item.rule_id)[0];
     el.otherList.appendChild(li);
   });
-  const status=stable ? "stable" : (stutters.length>0 ? "unstable" : "unknown");
-  el.stabilityHeading.textContent=status==="stable" ? t("stabilityStable") : (status==="unstable" ? t("stabilityUnstable") : t("stabilityUnknown"));
-  el.stabilityDescription.textContent=status==="stable" ? t("stabilityStableBody") : (status==="unstable" ? t("stabilityUnstableBody") : t("stabilityUnknownBody"));
-  el.stabilityDot.className="status-dot "+status;
-  el.stabilityObservations.textContent=t("observations",{count:frameCount});
-  el.stabilityStutters.textContent=t("stutters",{count:stutters.length});
-  renderExpertDetails(snapshot,allDiagnostics,stutters);
+  const status = stable ? "stable" : "unknown";
+  el.stabilityHeading.textContent = stable ? t("stabilityStable") : t("stabilityUnknown");
+  el.stabilityDescription.textContent = stable ? t("stabilityStableBody") : t("stabilityUnknownBody");
+  el.stabilityDot.className = "status-dot " + status;
+  el.stabilityObservations.textContent = frameCount === null
+    ? t("noData")
+    : t("observations", {count:frameCount});
+  el.stabilityStutters.textContent = stutters === null
+    ? t("noData")
+    : t("stutters", {count:stutters.length});
+  renderExpertDetails(snapshot, allDiagnostics, stutters || []);
   setView("result"); state.lastError=""; refreshHistory().then(updateResultCompareAvailability);
 }
 function renderExpertDetails(snapshot,diagnostics,stutters) {
