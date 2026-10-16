@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-17T02:42:00+07:00
-repo_ref: "main @ 2630ad9; Windows CI gate + debug build PASS in run 38956343967"
-active_wp: "UX-REDESIGN-0.5.0-beta (Windows CI gates + workspace debug build PASS; tag/release publication BLOCKED_ON_TOOL; local gate and packaged smoke UNVERIFIED)"
+last_updated: 2026-10-17T02:48:00+07:00
+repo_ref: "main @ 914662a; Windows CI gates + debug build PASS in run 38957035347"
+active_wp: "UX-REDESIGN-0.5.0-beta (current main gates + debug build PASS; v0.5.0-beta tag/release BLOCKED_ON_TOOL; local gate and packaged smoke UNVERIFIED)"
 ---
 
-## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; current main @ 2630ad9 passed Windows gates + debug build in run 38956343967; tag/release publication BLOCKED_ON_TOOL; packaged smoke UNVERIFIED and hardware acceptance remains BLOCKED_ON_USER)
+## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; current main @ 914662a passed Windows gates + debug build in run 38957035347; v0.5.0-beta tag/release BLOCKED_ON_TOOL; packaged smoke UNVERIFIED and hardware acceptance remains BLOCKED_ON_USER)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows CI gates + workspace debug build PAS
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-17 release workflow/docs sync verified: current head `914662ab13e6d3ea457109a963b37e0bfff02d3a` passed Windows gates and the debug workspace build in run `38957035347`. This run covers the 0.5.0-beta release workflow’s corrected beta examples/display name, release README status update, and the STATE synchronization. Earlier code-head verification remains run `38956343967` (359 Rust tests, Python 23/23, all dependency/security/schema/doc/link gates and `cargo build --locked --workspace` pass). This is CI evidence only; no local pinned-toolchain gate, NSIS bundle/SHA256SUMS, install/uninstall or installed GUI smoke has been run in this session. No `v0.5.0-beta` tag or GitHub release exists; the connector provides no tag/release write action, so publication cannot be completed from these tools. Hardware acceptance RC-05/RC-07/RC-12 remains blocked, and the unsigned-package limitation remains.
+
 - 2026-10-17 verified UI/CI follow-up on `main @ 2630ad96e99fe0fdedcfa132674c8911f19ff249`: GitHub Actions run `38956343967` completed success. Windows gate PASS: fmt; Clippy `-D warnings`; workspace tests 359 passed / 0 failed; `cargo deny check`; `cargo audit`; workflow security; JSON schemas; docs; Python suite 23/23; Markdown links checked 84 documents. Separate Windows debug build `cargo build --locked --workspace` PASS (29.83 s). This run verifies the corrected CSS contrast regex and the fail-fast shell policy for all multi-command CI/release gate steps. Important historical correction: run `38955528150` was falsely reported green because `test_primary_text_and_hover_colors_meet_wcag_aa_contrast` failed (unescaped regex quantifier in an f-string) but the default PowerShell runner continued to `check_links.py` and returned success; commit `2630ad9` fixes the regex, changes those steps to Bash `set -euo pipefail`, and adds regression coverage proving the gate scripts retain fail-fast behavior. These are CI results, not local pinned-toolchain proof; no local checkout/toolchain was available. Tag `v0.5.0-beta` and GitHub release remain absent; current connector cannot write tags/releases. NSIS build, checksum/install/uninstall, packaged GUI smoke, installed notifications/countdown/close and real PresentMon/hardware acceptance remain UNVERIFIED/BLOCKED_ON_USER.
 
 - 2026-10-17 follow-up UI audit (baseline `74a4e941afb6a80e1687fda5368c03b48e8203f2`): run `38954772910` passed Windows gates and debug build. Gates passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow security, schema/docs, Python tools (19 / OK), links, and `cargo build --locked --workspace`. A further review found locale changes could navigate users away from Settings, previous Compare scenario choices could carry to a newly selected pair, and white text on primary hover `#E04A54` measured `3.98:1`. This batch restores the current view, clears scenario confirmation/output on pair changes, darkens hover to `#B72D37`, and adds regression/contrast tests. Its CI remains pending. Local pinned-toolchain gates, installed UI/manual visual checks, NSIS install/uninstall and real PresentMon/hardware capture have not been run here; release tag/release write remains BLOCKED_ON_TOOL.
@@ -124,7 +126,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows CI gates + workspace debug build PAS
 
 ## NEXT
 
-Do a final read-only release-state audit: confirm no `v0.5.0-beta` tag/release exists, and continue reconciling the release workflow, notes, and artifact contract. Publication is BLOCKED_ON_TOOL because this GitHub connector cannot create/push a tag or publish a release; do not create a branch or claim a simulated publication. Local pinned-toolchain gates, NSIS/SHA256SUMS, install/uninstall, packaged GUI smoke, installed native notifications and real PresentMon/hardware acceptance remain unverified or BLOCKED_ON_USER.
+Publication is the remaining tool blocker: the exact `v0.5.0-beta` tag is absent, and the available GitHub connector has no operation to create/push tags or publish releases. Do not create a branch or claim a simulated release. To finish publication, an owner/local checkout must tag the verified `main @ 914662a` and push the tag; the existing release workflow then performs its full gate, NSIS build, SHA256SUMS and pre-release publish. Before calling the release complete, verify the tagged run’s result/assets and perform local pinned-toolchain gates, installer install/uninstall and packaged GUI smoke. Real PresentMon/hardware acceptance RC-05/RC-07/RC-12 and signing remain explicitly unverified/blocked.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.
