@@ -49,6 +49,7 @@ class UiContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.html = (WEB / "index.html").read_text(encoding="utf-8")
         cls.js = (WEB / "app.js").read_text(encoding="utf-8")
+        cls.css = (WEB / "styles.css").read_text(encoding="utf-8")
         cls.commands = (TAURI / "src" / "commands.rs").read_text(encoding="utf-8")
         cls.capability = json.loads(
             (TAURI / "capabilities" / "default.json").read_text(encoding="utf-8")
@@ -111,6 +112,63 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("const rawStutters = dashboard.stutters;", self.js)
         self.assertIn('frameCount === null ? t("noData")', self.js)
         self.assertIn('stutters === null', self.js)
+
+    def _css_var(self, name: str) -> str:
+        match = re.search(rf"--{re.escape(name)}:\s*(#[0-9A-Fa-f]{6})", self.css)
+        self.assertIsNotNone(match, f"CSS variable --{name} must be a six-digit color")
+        return match.group(1)
+
+    @staticmethod
+    def _luminance(color: str) -> float:
+        channels = [int(color.lstrip("#")[index:index + 2], 16) / 255 for index in (0, 2, 4)]
+        linear = [
+            channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+            for channel in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    @classmethod
+    def _contrast_ratio(cls, foreground: str, background: str) -> float:
+        high, low = sorted(
+            (cls._luminance(foreground), cls._luminance(background)),
+            reverse=True,
+        )
+        return (high + 0.05) / (low + 0.05)
+
+    def test_primary_text_and_hover_colors_meet_wcag_aa_contrast(self) -> None:
+        text = self._css_var("text")
+        muted = self._css_var("muted")
+        background = self._css_var("bg")
+        surface = self._css_var("surface")
+        pairs = [
+            ("text on background", text, background, 4.5),
+            ("muted text on background", muted, background, 4.5),
+            ("text on panel", text, surface, 4.5),
+            ("muted text on panel", muted, surface, 4.5),
+            ("button text on accent", "#FFFFFF", self._css_var("accent"), 4.5),
+            ("button text on hover", "#FFFFFF", self._css_var("accent-hover"), 4.5),
+            ("focus indicator on background", self._css_var("focus"), background, 3.0),
+            ("focus indicator on panel", self._css_var("focus"), surface, 3.0),
+        ]
+        for label, foreground, backdrop, minimum in pairs:
+            with self.subTest(pair=label):
+                self.assertGreaterEqual(
+                    self._contrast_ratio(foreground, backdrop),
+                    minimum,
+                    f"{label} must meet its contrast minimum",
+                )
+
+    def test_language_refresh_preserves_the_active_view(self) -> None:
+        apply_locale = self.js.split("function applyLocale()", 1)[1].split("function escapeHtml", 1)[0]
+        self.assertIn("const currentView = state.view;", apply_locale)
+        self.assertIn("if (state.view !== currentView) setView(currentView);", apply_locale)
+
+    def test_comparison_pair_change_requires_a_new_scenario_answer(self) -> None:
+        self.assertIn("const oldBefore = state.beforeId, oldAfter = state.afterId;", self.js)
+        self.assertIn("if (oldBefore !== state.beforeId || oldAfter !== state.afterId)", self.js)
+        self.assertIn("input.checked = false;", self.js)
+        self.assertIn("el.compareResult.hidden = true;", self.js)
+
     def test_close_event_permission_is_explicit(self) -> None:
         self.assertIn("core:event:default", self.capability["permissions"])
         self.assertIn("rwp-window-close-requested", self.js)

@@ -25,6 +25,7 @@ No user-facing changes yet since `0.5.0-beta`.
 
 - Ensure the managed temporary PresentMon CSV is cleaned up when a capture worker returns or unwinds, and explicitly authorize the native window-close event listener used by the close-confirmation guard.
 - Keep the stability verdict Unknown unless `stability.v1` is present; do not infer instability from the existence of stutter rows, and render absent frame/stutter fields as unavailable rather than zero.
+- Preserve the active page when changing language; clear scenario confirmations and stale output when either comparison session changes; improve primary-button hover contrast to retain WCAG AA text contrast.
 
 ## [0.4.0-beta] - 2026-10-16
 

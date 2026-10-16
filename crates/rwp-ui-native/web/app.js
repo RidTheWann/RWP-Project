@@ -137,6 +137,7 @@ function t(key, values) {
   return value;
 }
 function applyLocale() {
+  const currentView = state.view;
   document.documentElement.lang = state.locale;
   document.querySelectorAll("[data-i18n]").forEach(function(node) {
     node.textContent = t(node.getAttribute("data-i18n"));
@@ -147,6 +148,7 @@ function applyLocale() {
   renderHistory();
   if (state.snapshot && state.snapshot.status === "completed") renderCompleted(state.snapshot);
   if (state.snapshot && state.snapshot.status === "failed") renderFailure(state.snapshot.message || state.lastError);
+  if (state.view !== currentView) setView(currentView);
 }
 function escapeHtml(value) {
   return String(value === undefined || value === null ? "" : value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
@@ -698,8 +700,15 @@ function wireEvents() {
     const id=button.getAttribute("data-session-id"),action=button.getAttribute("data-history-action");
     if(action==="load"){await openHistoryEntry(id);return;}
     const entry=state.history.find(function(item){return item.session_id===id;});if(!entry||!entry.verified)return;
+    const oldBefore = state.beforeId, oldAfter = state.afterId;
     if(action==="before")state.beforeId=id;if(action==="after")state.afterId=id;
     if(state.beforeId&&state.beforeId===state.afterId){if(action==="before")state.afterId="";else state.beforeId="";}
+    if (oldBefore !== state.beforeId || oldAfter !== state.afterId) {
+      document.querySelectorAll('input[name="same-scenario"]').forEach(function(input) {
+        input.checked = false;
+      });
+      el.compareResult.hidden = true;
+    }
     renderHistory();updateCompareButton();
   });
   document.querySelectorAll('input[name="same-scenario"]').forEach(function(input){input.addEventListener("change",updateCompareButton);});

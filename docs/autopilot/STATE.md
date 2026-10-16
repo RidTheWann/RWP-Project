@@ -1,8 +1,8 @@
 ---
 plan_version: 1
-last_updated: 2026-10-17T02:40:00+07:00
-repo_ref: "main @ 6ba913e; 0.5.0-beta candidate plus stability-Unknown UI correction; CI run 38954719859 pending"
-active_wp: "UX-REDESIGN-0.5.0-beta (stability-Unknown correctness fix and static regression added; CI pending; release publication blocked by tag/release tool capability)"
+last_updated: 2026-10-17T02:45:00+07:00
+repo_ref: "main @ 74a4e94; Windows gate + debug build PASS in run 38954772910"
+active_wp: "UX-REDESIGN-0.5.0-beta (follow-up locale/compare/contrast correctness batch committed; verification pending)"
 ---
 
 ## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; Windows gates + debug build PASS on 4ccaf02 (run 38912789000); tag/release publication pending and hardware acceptance remains BLOCKED_ON_USER)
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (stability-Unknown correctness fix and static
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-17 follow-up UI audit (baseline `74a4e941afb6a80e1687fda5368c03b48e8203f2`): run `38954772910` passed Windows gates and debug build. Gates passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow security, schema/docs, Python tools (19 / OK), links, and `cargo build --locked --workspace`. A further review found locale changes could navigate users away from Settings, previous Compare scenario choices could carry to a newly selected pair, and white text on primary hover `#E04A54` measured `3.98:1`. This batch restores the current view, clears scenario confirmation/output on pair changes, darkens hover to `#B72D37`, and adds regression/contrast tests. Its CI remains pending. Local pinned-toolchain gates, installed UI/manual visual checks, NSIS install/uninstall and real PresentMon/hardware capture have not been run here; release tag/release write remains BLOCKED_ON_TOOL.
+
 - 2026-10-17 UI result semantics audit: code fix commit `b70e213a142608e9527fd2ce0c4e200c37d1a61f` changes the stability summary to Stable only when explicit `stability.v1` is present; all other outcomes are Unknown. Missing frame_count/stutters now render as unavailable instead of fabricated zero. Regression test added in `tools/test_ui_contract.py` (commit `135d34be09f7ac7864cd826e6fe654fa1ee05673`) and changelog updated (commit `6ba913e3efffd7de4d3694770c352f5f7bb63039`). CI run `38954719859` is queued/pending on current main and must be checked; prior full Windows gate + workspace debug build PASS was run `38914012381` on parent code head `322e538`, before this correctness fix. Local pinned Rust toolchain/gates are not available in this execution (no checkout/toolchain), so CI remains supplemental rather than a claim of local verification. Release tag/pre-release remains BLOCKED_ON_TOOL: the available GitHub tool set has no tag/release write action. Package install/uninstall, installed GUI, notifications/countdown/window-close and real PresentMon hardware validation remain UNVERIFIED/BLOCKED_ON_USER.
 
 - 2026-10-16 final verification of candidate source `c6c3588184d40167c9612a04ea0840392dbd349c`: run 38913367514 completed success on Windows gates and Windows debug build. Gate job passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow-security, schema/docs, Python tools (18 / OK), and links; `cargo build --locked --workspace` also passed. This confirms the source candidate; it does not prove local gates, NSIS packaging, install/uninstall, installed GUI notifications/close/countdown, visual accessibility execution, or real PresentMon/hardware acceptance.
@@ -120,7 +122,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (stability-Unknown correctness fix and static
 
 ## NEXT
 
-Check CI run `38954719859` for current main after the stability-Unknown UI fix and static regression test; inspect exact failing output and repair without weakening gates. Once green, continue release packaging audit. Publication is BLOCKED_ON_TOOL because the available GitHub connector has no tag/release write action; do not create a branch to fake a tag. Local pinned-toolchain gates, NSIS/install/uninstall, packaged GUI smoke, and real PresentMon/hardware acceptance remain unverified.
+Inspect the Windows gates and debug build for the latest locale/compare/contrast batch; fix any regression from exact CI output and rerun the gates. Then resume release packaging review. Publication remains BLOCKED_ON_TOOL because the available GitHub connector has no create-tag/release action; do not create a branch to fake a tag. Local pinned-toolchain gates, NSIS/install/uninstall, packaged GUI smoke, and real PresentMon/hardware acceptance remain unverified.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.
