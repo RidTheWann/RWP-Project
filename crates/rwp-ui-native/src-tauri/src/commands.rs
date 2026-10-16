@@ -807,7 +807,8 @@ fn component_version_supported(
 fn component_file_ready(path: &Path) -> bool {
     if !path.is_absolute()
         || !path.file_name().is_some_and(|name| {
-            name.to_string_lossy().eq_ignore_ascii_case("PresentMon.exe")
+            name.to_string_lossy()
+                .eq_ignore_ascii_case("PresentMon.exe")
         })
         || !path.metadata().is_ok_and(|metadata| metadata.is_file())
         || path.canonicalize().is_err()
@@ -1085,7 +1086,10 @@ mod audit_regressions {
             build: 0,
         })));
         assert!(super::component_version_supported(Err(
-            PresentMonVersionError::UnknownVersion { api: "test", code: 1813 }
+            PresentMonVersionError::UnknownVersion {
+                api: "test",
+                code: 1813,
+            }
         )));
         assert!(!super::component_version_supported(Err(
             PresentMonVersionError::InvalidResource
