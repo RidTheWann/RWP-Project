@@ -106,6 +106,19 @@ pub struct WindowCloseGuard {
     pub(crate) allow_close: std::sync::atomic::AtomicBool,
 }
 
+/// Deletes a managed temporary PresentMon CSV even when the capture worker unwinds.
+struct ManagedOutputCleanup(PathBuf);
+
+impl Drop for ManagedOutputCleanup {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_file(&self.0)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!(target: "rwp", event = "managed_output_cleanup_failed");
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum SessionSnapshot {
@@ -995,7 +1008,8 @@ fn start_session_inner(
 
     let state_handle = manager.inner().state.clone();
     let event_app = app.clone();
-    let cleanup_output = cleanup_output_on_finish.then(|| config.output_file.clone());
+    let cleanup_output =
+        cleanup_output_on_finish.then(|| ManagedOutputCleanup(config.output_file.clone()));
     match std::thread::Builder::new()
         .name("rwp-session-worker".to_owned())
         .spawn(move || {
@@ -1006,16 +1020,10 @@ fn start_session_inner(
             run_session_worker(
                 manager,
                 Some(&event_app),
-                || {
+                move || {
+                    let _output_cleanup = cleanup_output;
                     let runner = SessionRunner;
-                    let result = runner.run(&config, &cancellation);
-                    if let Some(path) = cleanup_output
-                        && let Err(error) = fs::remove_file(&path)
-                        && error.kind() != std::io::ErrorKind::NotFound
-                    {
-                        tracing::warn!(target: "rwp", event = "managed_output_cleanup_failed");
-                    }
-                    result
+                    runner.run(&config, &cancellation)
                 },
                 !request.disable_stable_notification,
                 &request.notification_language,
@@ -1094,6 +1102,20 @@ mod audit_regressions {
         assert!(!super::component_version_supported(Err(
             PresentMonVersionError::InvalidResource
         )));
+    }
+
+    #[test]
+    fn managed_output_cleanup_removes_temporary_csv_on_drop()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let path = std::env::temp_dir().join(format!(
+            "rwp-managed-output-cleanup-{}-{}.csv",
+            std::process::id(),
+            super::now_unix_ms()
+        ));
+        fs::write(&path, b"temporary PresentMon output")?;
+        drop(super::ManagedOutputCleanup(path.clone()));
+        assert!(!path.exists());
+        Ok(())
     }
 
     #[test]

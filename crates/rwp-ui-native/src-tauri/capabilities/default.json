@@ -3,5 +3,5 @@
   "identifier": "main-capability",
   "description": "Capability for the main desktop window and session IPC.",
   "windows": ["main"],
-  "permissions": ["session-commands"]
+  "permissions": ["session-commands", "core:event:default"]
 }
