@@ -48,11 +48,15 @@ Full command reference: `docs/cli-reference.md`. Error codes: `docs/cli-errors.m
 
 ## Quickstart — GUI
 
-Build and run the native app, pick the PresentMon executable (Browse), choose
-a live target process from the picker (or type its PID), set duration and
-interval, and Start capture. Progress, history, two-session Compare, and
-failure remediation are built in; captures that need real hardware or
-PresentMon permissions are documented in `docs/acceptance/gui.md`.
+Open RWP and follow the Home readiness checks. PresentMon remains user-supplied:
+when prompted, choose a supported `PresentMon.exe` from its official source;
+RWP does not bundle or download it. Open your game, select **Refresh**, choose
+the running application, and select **Start measuring**. The default preparation
+countdown is 5 seconds and the measurement duration is 60 seconds. Duration,
+telemetry interval, and other technical controls stay under **Settings →
+Advanced**. Results, verified local history, Before/After comparison, and
+failure remediation are built in. Manual Windows/PresentMon acceptance remains
+tracked in `docs/acceptance/gui.md`.
 
 ## Project status
 

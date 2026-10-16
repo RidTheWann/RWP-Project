@@ -39,8 +39,11 @@ Jalankan dari root repo, dalam urutan ini:
 3. `cargo test --workspace --all-features --locked`
 4. `cargo deny check`
 5. `cargo audit`
-6. `python tools/validate_schemas.py`
-7. `python tools/check_docs.py` + unit checker `python -m unittest discover -s tools -v`
+6. `python tools/check_workflow_security.py`
+7. `python tools/validate_schemas.py`
+8. `python tools/check_docs.py`
+9. `python -m unittest discover -s tools -v`
+10. `python tools/check_links.py`
 
 Semua perintah memakai `--locked` di mana didukung (`Cargo.lock` ter-commit).
 `fuzz/` tetap `exclude` dari workspace stabil sehingga gate di atas tidak
