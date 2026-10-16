@@ -1,8 +1,8 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T21:15:00+07:00
-repo_ref: "main @ c6c3588 (0.5.0-beta source candidate; CI run 38913367514 PASS)"
-active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on c6c3588; tag/release publication pending; packaged smoke UNVERIFIED)"
+last_updated: 2026-10-17T02:40:00+07:00
+repo_ref: "main @ 6ba913e; 0.5.0-beta candidate plus stability-Unknown UI correction; CI run 38954719859 pending"
+active_wp: "UX-REDESIGN-0.5.0-beta (stability-Unknown correctness fix and static regression added; CI pending; release publication blocked by tag/release tool capability)"
 ---
 
 ## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; Windows gates + debug build PASS on 4ccaf02 (run 38912789000); tag/release publication pending and hardware acceptance remains BLOCKED_ON_USER)
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on c6c3588;
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-17 UI result semantics audit: code fix commit `b70e213a142608e9527fd2ce0c4e200c37d1a61f` changes the stability summary to Stable only when explicit `stability.v1` is present; all other outcomes are Unknown. Missing frame_count/stutters now render as unavailable instead of fabricated zero. Regression test added in `tools/test_ui_contract.py` (commit `135d34be09f7ac7864cd826e6fe654fa1ee05673`) and changelog updated (commit `6ba913e3efffd7de4d3694770c352f5f7bb63039`). CI run `38954719859` is queued/pending on current main and must be checked; prior full Windows gate + workspace debug build PASS was run `38914012381` on parent code head `322e538`, before this correctness fix. Local pinned Rust toolchain/gates are not available in this execution (no checkout/toolchain), so CI remains supplemental rather than a claim of local verification. Release tag/pre-release remains BLOCKED_ON_TOOL: the available GitHub tool set has no tag/release write action. Package install/uninstall, installed GUI, notifications/countdown/window-close and real PresentMon hardware validation remain UNVERIFIED/BLOCKED_ON_USER.
+
 - 2026-10-16 final verification of candidate source `c6c3588184d40167c9612a04ea0840392dbd349c`: run 38913367514 completed success on Windows gates and Windows debug build. Gate job passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow-security, schema/docs, Python tools (18 / OK), and links; `cargo build --locked --workspace` also passed. This confirms the source candidate; it does not prove local gates, NSIS packaging, install/uninstall, installed GUI notifications/close/countdown, visual accessibility execution, or real PresentMon/hardware acceptance.
 
 - 2026-10-16 FINAL CANDIDATE CI on `4ccaf02ec4f7d9620c34abf2766ce0b07e2baea4`: run 38912789000 completed success on Windows. Gates job PASS for Rust 1.99.0 fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow security, schema, docs, Python unit tools (18 / OK), and links; separate `cargo build --locked --workspace` Windows debug job PASS. This is CI evidence on the candidate tree, not local verification. Latest GitHub release listing has no `v0.5.0-beta` release and matching tag ref is empty. Current GitHub connector exposes no create-tag, create-release, or workflow-dispatch write action; publication is BLOCKED_ON_TOOL (not simulated with a branch). The packaged NSIS workflow, installer hash, install/uninstall and installed GUI smoke remain UNVERIFIED; live PresentMon/hardware acceptance stays BLOCKED_ON_USER.
@@ -118,7 +120,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on c6c3588;
 
 ## NEXT
 
-Release blocker: publish the already-green candidate by creating and pushing annotated tag `v0.5.0-beta` at `c6c3588184d40167c9612a04ea0840392dbd349c` from the existing local `main` checkout; then watch the tag-triggered release workflow and verify NSIS installer + SHA256SUMS. The current GitHub connector has no tag/release-write action, so do not create a branch to fake a tag. After publication, verify install/uninstall and packaged GUI smoke; real PresentMon/hardware acceptance and local pinned-toolchain gates remain unverified here.
+Check CI run `38954719859` for current main after the stability-Unknown UI fix and static regression test; inspect exact failing output and repair without weakening gates. Once green, continue release packaging audit. Publication is BLOCKED_ON_TOOL because the available GitHub connector has no tag/release write action; do not create a branch to fake a tag. Local pinned-toolchain gates, NSIS/install/uninstall, packaged GUI smoke, and real PresentMon/hardware acceptance remain unverified.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.
