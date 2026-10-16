@@ -12,6 +12,10 @@ const APPLICATION_COMMANDS: &[&str] = &[
     "session_pick_presentmon_file",
     "session_pick_output_file",
     "session_error_remediation",
+    "session_start_managed",
+    "session_preflight",
+    "session_error_kind",
+    "session_close_confirmed",
 ];
 
 fn main() {
