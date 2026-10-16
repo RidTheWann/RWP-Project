@@ -33,7 +33,7 @@ Verified implementation details that constrain the UX:
 - session_error_remediation uses English substring matching for nine known cases and returns no guidance when no substring matches.
 - A Rust-generated native notification already exists for Stable via rwp_ui::stable_notification_content. Its text is hard-coded English and includes generic measurement statistics, not process identity. A generic completion notification does not yet exist.
 - main.rs has no custom window-close confirmation handler.
-- Current product/Tauri config version is 0.4.0. The checked-in docs/autopilot/STATE.md header still points to 353f284 / 0.3.0-era metadata. Reconcile stale state metadata when recording implementation progress; do not copy it as current fact.
+- Current product/Tauri config version is 0.4.0. The STATE.md WP/RC tables preserve historical 0.3.0-era acceptance records and prior gate evidence; the front matter and newest Log entry were reconciled for this UX handoff, but no UX gate has been run. Treat old gate outputs as historical evidence only and record fresh results for actual implementation.
 
 ## 2. Non-negotiable product contract
 
