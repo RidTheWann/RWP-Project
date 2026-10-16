@@ -94,7 +94,7 @@ All additions are IPC-only. Do not alter manifest JSON, report JSON, analysis co
 
 Notifications originate in Rust, not webview i18n. Add a generic completion notification after a Completed result; its copy is static and never includes application, PID, executable path or process identity. Stable notification stays conditional on a finished Stable verdict and the Stable preference. It is never an early-stop signal.
 
-Best bilingual design: add an id/en notification-language field to the IPC start request with a backward-compatible default, and maintain a small static translation table in Rust or the renderer-neutral UI crate. Do not assume web-only i18n keys automatically reach Rust. No manifest schema change.
+Best bilingual design: add an id/en notification-language field to the IPC start request with a backward-compatible default, and maintain a small static translation table in Rust or the renderer-neutral UI crate. Do not assume web-only i18n keys automatically reach Rust. No manifest schema change. Official Tauri v2 guidance says Windows native notifications work only for installed apps; test the packaged NSIS application, not only a development run. Delivery is best-effort and must not be promised when Windows denies or suppresses notifications.
 
 ### 3.6 Window close during measurement
 
@@ -147,18 +147,18 @@ Stable alongside other diagnoses must not erase those findings. Use “Hasil sta
 
 Mappings are display copy only. The engine owns activation thresholds, minimum samples and Unknown. No active diagnosis means the engine’s Unknown result. Do not duplicate thresholds in UI. Wording/reasons/advice need analysis review before implementation.
 
-| Category / rule | ID title | EN title | ID advice |
-|---|---|---|---|
-| CpuBound / cpu_bound.v1 | Ada indikasi hambatan prosesor | Possible CPU bottleneck | Coba kurangi pengaturan game yang membebani prosesor, lalu ukur ulang. |
-| GpuBound / gpu_bound.v2 | Ada indikasi hambatan grafis | Possible graphics bottleneck | Coba kurangi kualitas grafis, lalu ukur ulang. |
-| FramePacing / frame_pacing.v2 | Waktu antar-frame terindikasi kurang konsisten | Frame pacing may be inconsistent | Periksa detail pengukuran dan ulangi dengan kondisi yang serupa. |
-| Thermal / thermal.v2 | Ada indikasi masalah terkait suhu | Possible thermal issue | Periksa pendinginan dan ventilasi PC. |
-| MemoryPressure / memory_pressure.v1 | Ada indikasi tekanan pada memori | Possible memory pressure | Tutup aplikasi yang tidak diperlukan, lalu ukur ulang. |
-| VramPressure / vram_pressure.v1 | Ada indikasi tekanan pada memori grafis | Possible graphics memory pressure | Coba turunkan resolusi atau kualitas tekstur, lalu ukur ulang. |
-| BackgroundInterference / background_interference.v3 | Aktivitas latar mungkin memengaruhi hasil | Background activity may affect results | Tutup aplikasi latar yang tidak diperlukan dan ukur ulang. |
-| Stable / stability.v1 | Belum ada masalah yang terdeteksi | No issues detected | Bandingkan dengan pengukuran lain dalam kondisi yang serupa. |
-| Unknown | Belum bisa disimpulkan | Inconclusive | Coba ukur lagi hingga selesai. |
-| StreamingOverhead (no implemented rule) | Belum bisa disimpulkan (fallback only) | Inconclusive (fallback only) | No category-specific advice; do not create a rule. |
+| Category / rule | ID title | EN title | ID reason | EN reason | ID advice | EN advice |
+|---|---|---|---|---|---|---|
+| CpuBound / cpu_bound.v1 | Ada indikasi hambatan prosesor | Possible CPU bottleneck | Bukti pengukuran mengindikasikan prosesor mungkin membatasi performa. | Measurement evidence suggests the CPU may be limiting performance. | Coba kurangi pengaturan game yang membebani prosesor, lalu ukur ulang. | Try lowering CPU-intensive game settings, then measure again. |
+| GpuBound / gpu_bound.v2 | Ada indikasi hambatan grafis | Possible graphics bottleneck | Bukti pengukuran mengindikasikan kemampuan grafis mungkin membatasi performa. | Measurement evidence suggests graphics performance may be limiting the result. | Coba kurangi kualitas grafis, lalu ukur ulang. | Try lowering graphics quality, then measure again. |
+| FramePacing / frame_pacing.v2 | Waktu antar-frame terindikasi kurang konsisten | Frame pacing may be inconsistent | Bukti pengukuran menunjukkan pola waktu antar-frame yang perlu diperhatikan. | Measurement evidence indicates a frame-timing pattern worth investigating. | Periksa detail pengukuran dan ulangi dengan kondisi yang serupa. | Review the measurement details and repeat under similar conditions. |
+| Thermal / thermal.v2 | Ada indikasi masalah terkait suhu | Possible thermal issue | Bukti pengukuran mengindikasikan kemungkinan pengaruh kondisi termal. | Measurement evidence suggests a possible thermal influence. | Periksa pendinginan dan ventilasi PC. | Check your PC's cooling and ventilation. |
+| MemoryPressure / memory_pressure.v1 | Ada indikasi tekanan pada memori | Possible memory pressure | Bukti pengukuran mengindikasikan tekanan pada penggunaan memori. | Measurement evidence suggests memory pressure. | Tutup aplikasi yang tidak diperlukan, lalu ukur ulang. | Close unnecessary applications, then measure again. |
+| VramPressure / vram_pressure.v1 | Ada indikasi tekanan pada memori grafis | Possible graphics memory pressure | Bukti pengukuran mengindikasikan tekanan pada memori grafis. | Measurement evidence suggests graphics memory pressure. | Coba turunkan resolusi atau kualitas tekstur, lalu ukur ulang. | Try lowering resolution or texture quality, then measure again. |
+| BackgroundInterference / background_interference.v3 | Aktivitas latar mungkin memengaruhi hasil | Background activity may affect results | Bukti pengukuran mengindikasikan kemungkinan gangguan dari aktivitas latar. | Measurement evidence suggests possible interference from background activity. | Tutup aplikasi latar yang tidak diperlukan dan ukur ulang. | Close unnecessary background applications and measure again. |
+| Stable / stability.v1 | Belum ada masalah yang terdeteksi | No issues detected | Hasil memenuhi kriteria stabilitas yang ada; ini bukan bukti bahwa game pasti lancar. | The result meets the existing stability criteria; this does not prove the game is always smooth. | Bandingkan dengan pengukuran lain dalam kondisi yang serupa. | Compare with another measurement taken under similar conditions. |
+| Unknown | Belum bisa disimpulkan | Inconclusive | Data atau bukti yang tersedia belum mendukung kesimpulan yang dapat diandalkan. | The available data or evidence does not support a reliable conclusion. | Coba ukur lagi hingga selesai. | Try measuring again and let it finish. |
+| StreamingOverhead (no implemented rule) | Belum bisa disimpulkan (fallback only) | Inconclusive (fallback only) | Tidak ada aturan analisis untuk kategori ini; gunakan fallback Unknown. | No analysis rule exists for this category; use the Unknown fallback. | Jangan membuat saran khusus kategori ini. | Do not create category-specific advice. |
 
 Stable explanation: “Hasil memenuhi kriteria stabilitas yang ada; ini bukan bukti bahwa game pasti lancar.” / “The result meets the existing stability criteria; this does not prove the game is always smooth.”
 
@@ -308,7 +308,7 @@ Use system fonts (Segoe UI, system-ui, sans-serif). Do not download fonts or add
 
 ### Accessibility acceptance
 
-- WCAG 2.2 AA: at least 4.5:1 for normal text and 3:1 for large text. Measure actual final token combinations; do not infer compliance visually.
+- WCAG 2.2 AA minimum: at least 4.5:1 for normal text and 3:1 for large text. Microsoft's Windows inclusive-design guidance recommends targeting 5:1 for standard text and 3:1 for large text. Use 5:1 as the preferred standard-text target where feasible; measure actual final token combinations and distinguish the WCAG minimum from the preferred target.
 - Use semantic landmarks/headings and native controls. Every input has a label. All actions work through keyboard; visible focus is never removed.
 - Prefer a 44×44 CSS-pixel target for commonly used buttons where layout permits; keep 900×600 practical. Do not rely on hover.
 - Countdown uses concise aria-live="polite" announcements. Progress uses role="progressbar" with name and values. Do not announce each visual repaint.
@@ -596,7 +596,7 @@ Implement small, independently auditable batches, preferably no more than about 
 - Recording contains no live FPS/stability claim. Elapsed/progress comes from timestamps and requested duration.
 - Stop confirmation sends one cancel request. UI enters Analyzing while backend may remain Running, then transitions to Completed/Failed without duplicate calls.
 - Expiry does not call session_stop just to force a state transition.
-- Completion toast is attempted after Completed. Stable toast is post-completion, verdict- and preference-controlled.
+- Completion toast is attempted after Completed. Stable toast is post-completion, verdict- and preference-controlled. Verify both from the installed Windows NSIS app because Tauri notes Windows notifications are install-only; delivery remains best-effort.
 - Window close never silently discards a worker. Test Stay, confirm-close, Completed/Failed races, cancellation and child cleanup.
 - Both manifests are verified before compare. Unverified choices are disabled; backend still rejects invalid sessions.
 - same_scenario mapping is Yes→true and Not sure/No→false. False yields InconclusiveDifferentScenario.
@@ -623,8 +623,8 @@ Run on the intended Windows development host using the pinned toolchain and exac
 5. cargo audit
 6. python tools/validate_schemas.py
 7. python tools/check_docs.py
-8. python -m unittest discover -s tools -p "test_*.py"
-9. python tools/check_links.py
+8. python -m unittest discover -s tools -v
+9. python tools/check_links.py (also required by MASTER_PLAN and active state logs; local-gates.md currently omits it, so do not delete or silently ignore this documented drift)
 
 Then run a packaged Windows smoke test for countdown minimized, complete capture, early stop, failures, completion notification, Stable notification, history load/compare and close cleanup. This handoff claims no Rust build, test or runtime verification.
 
