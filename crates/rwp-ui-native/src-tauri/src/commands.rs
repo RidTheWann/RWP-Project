@@ -532,7 +532,7 @@ impl SessionManager {
 
     fn finish(&self, result: SessionResult) -> Result<(), String> {
         let mut state = self.lock()?;
-        let interrupted = result.stop_outcome.is_some();
+        let interrupted = result.report.interrupted;
         state.snapshot = SessionSnapshot::Completed {
             process_id: result.process_id,
             interrupted,
@@ -983,12 +983,11 @@ fn start_session_inner(
                 || {
                     let runner = SessionRunner;
                     let result = runner.run(&config, &cancellation);
-                    if let Some(path) = cleanup_output {
-                        if let Err(error) = fs::remove_file(&path) {
-                            if error.kind() != std::io::ErrorKind::NotFound {
-                                tracing::warn!(target: "rwp", event = "managed_output_cleanup_failed");
-                            }
-                        }
+                    if let Some(path) = cleanup_output
+                        && let Err(error) = fs::remove_file(&path)
+                        && error.kind() != std::io::ErrorKind::NotFound
+                    {
+                        tracing::warn!(target: "rwp", event = "managed_output_cleanup_failed");
                     }
                     result
                 },
