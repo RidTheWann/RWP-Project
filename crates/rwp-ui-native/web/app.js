@@ -399,7 +399,7 @@ function diagnosisCopy(ruleId) {
   return (map[ruleId] || map.unknown).map(function(key){return t(key);});
 }
 function isStreamingDiagnostic(item) {
-  return String(item.rule_id || "").startsWith("streaming_overhead") || String(item.category || "").toLowerCase().includes("streamingoverhead");
+  return String(item.rule_id || "").startsWith("streaming_overhead") || String(item.category || "").toLowerCase().includes("streaming");
 }
 function renderCompleted(snapshot) {
   el.resultSuccess.hidden=false; el.resultFailure.hidden=true;
@@ -422,10 +422,16 @@ function renderCompleted(snapshot) {
     el.verdictTitle.textContent=copy[0]; el.verdictReason.textContent=copy[1]; el.verdictAdvice.textContent=copy[2];
   }
   if (snapshot.interrupted) el.verdictAdvice.textContent=t("verdictInterruptedAdvice");
-  const others=diagnostics.slice(1);
+  const others = stable && diagnostics.length > 1
+    ? diagnostics.filter(function(item) { return item.rule_id !== "stability.v1"; })
+    : diagnostics.slice(1);
   el.otherList.replaceChildren();
-  el.otherSection.hidden=others.length===0;
-  others.forEach(function(item){const li=document.createElement("li");li.textContent=diagnosisCopy(item.rule_id)[0];el.otherList.appendChild(li);});
+  el.otherSection.hidden = others.length === 0;
+  others.forEach(function(item) {
+    const li = document.createElement("li");
+    li.textContent = diagnosisCopy(item.rule_id)[0];
+    el.otherList.appendChild(li);
+  });
   const status=stable ? "stable" : (stutters.length>0 ? "unstable" : "unknown");
   el.stabilityHeading.textContent=status==="stable" ? t("stabilityStable") : (status==="unstable" ? t("stabilityUnstable") : t("stabilityUnknown"));
   el.stabilityDescription.textContent=status==="stable" ? t("stabilityStableBody") : (status==="unstable" ? t("stabilityUnstableBody") : t("stabilityUnknownBody"));
@@ -504,8 +510,18 @@ async function refreshHistory() {
   }catch(_){el.historyMessage.textContent=t("refreshFailed");}
 }
 function shortSessionId(raw) {
-  const value=String(raw||"");
-  return value.length>12?value.slice(0,12)+"…":value;
+  const value = String(raw || "");
+  if (value.length <= 12) return value;
+  let prefixLength = 12;
+  while (prefixLength < value.length) {
+    const prefix = value.slice(0, prefixLength);
+    const collisions = state.history.filter(function(entry) {
+      return String(entry.session_id || "").startsWith(prefix);
+    }).length;
+    if (collisions <= 1) break;
+    prefixLength = Math.min(value.length, prefixLength + 4);
+  }
+  return value.slice(0, prefixLength) + (prefixLength < value.length ? "…" : "");
 }
 function historyLabel(entry){return cleanApp(entry.application)+" · "+t("sessionLabel",{id:shortSessionId(entry.session_id)});}
 function renderHistory() {
@@ -553,6 +569,7 @@ function renderComparison(result) {
   el.compareStatusTitle.textContent=title;el.compareStatusBody.textContent=body+(status==="InconclusiveDifferentScenario"?" "+t("compareAdvice"):"");
   const metrics=[[t("expertP99"),result.p99_change],[t("expertAverageFps"),result.average_fps_change],[t("expertStutters"),result.stutter_change]];
   el.compareMetrics.innerHTML=metrics.map(function(pair){return "<div><dt>"+escapeHtml(pair[0])+"</dt><dd>"+escapeHtml(pair[1]===undefined||pair[1]===null?t("noData"):pair[1])+"</dd></div>";}).join("");
+  el.compareMetrics.hidden = status === "InconclusiveDifferentScenario";
   el.compareResult.hidden=false;
 }
 async function openHistoryEntry(sessionId) {
