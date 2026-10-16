@@ -1,8 +1,8 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T14:25:06+07:00
-repo_ref: main @ 353f284 (v0.3.0-alpha tag pushed + published; tree has uncommitted QPC + 0.4.0-beta work); git dipakai untuk publish (commit/push/tag atas perintah owner); klaim perilaku tetap via baca file langsung + output gate yang ditempel di Log, bukan via git log/diff
-active_wp: pre-0.4.0-beta (release prep; tag + publish next on owner order already given)
+last_updated: 2026-10-16T19:05:00+07:00
+repo_ref: "main @ de8d0ff (UX handoff docs updated; implementation baseline 1216ac9; no code changed)"
+active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not started)"
 ---
 
 ## Status WP (post-alpha tree 0.3.0; alpha 0.1.0/0.2.0 records frozen; v1.0 hardware acceptance stays BLOCKED_ON_USER; alpha local gate 2026-10-11 green: fmt/clippy/test 298/deny/audit/schemas/docs/unit-10/links-70)
