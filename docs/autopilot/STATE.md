@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T18:59:56+07:00
-repo_ref: "main @ 1216ac9 product-code baseline; current UX handoff 4f2608f; documentation-only changes"
-active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not started)"
+last_updated: 2026-10-16T19:40:01+07:00
+repo_ref: "main @ 4e4f1de (0.5.0-beta candidate implementation/docs; publication pending)"
+active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; final CI pending; packaged Windows smoke UNVERIFIED)"
 ---
 
-## Status WP (product code baseline 0.4.0-beta @ 1216ac9; older WP rows/gate outputs remain historical evidence; current UX handoff docs-only, implementation NOT STARTED; v1.0 hardware acceptance remains BLOCKED_ON_USER)
+## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; final-main CI pending; hardware acceptance remains BLOCKED_ON_USER)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -70,6 +70,9 @@ active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not starte
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-16 UX-REDESIGN-0.5.0-BETA (source/code and docs committed directly to main): replaced the native web shell with Home, separate deadline-based Countdown/Recording/Analyzing states, friendly Results, History/Before-After and Settings/Advanced; added additive managed capture/preflight/error-kind/window-close/notification IPC and updated command permission allowlists; localized diagnosis/result/error copy; bumped workspace and local path dependencies, Cargo.lock local packages and Tauri config to 0.5.0-beta; lowered Tauri minimum window size to 900x600; added release candidate notes and GUI acceptance checklist. No external dependency added, no analysis threshold/rule/schema changed. CI run 38901345257 passed the gate job on an intermediate candidate revision (fmt/clippy/workspace tests 358 passed/0 failed/deny/audit/schema/docs/unit/link/security); its later Windows debug-build job did not complete before subsequent version/docs commits. CI for the current main HEAD must be checked separately. Packaged Windows smoke tests, minimized countdown, installed native notifications, close lifecycle, actual PresentMon capture and GUI accessibility measurements remain NOT RUN/UNVERIFIED. The GitHub tag/release has not been proven published; existing RC-05 overhead and RC-07/RC-12 hardware acceptance blockers remain.
+
+
 - 2026-10-16 UX-REDESIGN-HANDOFF DONE (design-only): added docs/autopilot/UX_REDESIGN_HANDOFF.md with source audit, ID/EN copy deck, IA/wireframes, best-default decisions, five Muse batches, acceptance checklist, and official accessibility/Tauri references. Handoff revision: 4f2608fbc56531fd8526a7e3cbabaaee909c8187. Source baseline: 1216ac9eea70e7cb011faa1aa21d161cf7e1e8c8. No Rust or web UI code, analysis rules, thresholds, or persisted schemas changed. No build, tests, local gates, accessibility run, or packaged Windows smoke test performed. Implementation remains TODO/UNVERIFIED.
 
 
@@ -105,8 +108,7 @@ active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not starte
 
 ## NEXT
 
-UX redesign handoff is ready at docs/autopilot/UX_REDESIGN_HANDOFF.md. Muse should begin with Batch 1 source verification and additive adapters, then execute the five-batch plan with test-first local gates and record real output. UX implementation, contrast measurements, installed Windows notifications, and close-lifecycle smoke tests remain NOT RUN/UNVERIFIED. Existing v1.0 hardware acceptance blockers remain unchanged.
-
+Check the final CI run for the latest main commit; fix any real failures without weakening gates, then determine whether the available GitHub integration can publish tag v0.5.0-beta. Do not claim a published release or Windows runtime acceptance without evidence.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.
