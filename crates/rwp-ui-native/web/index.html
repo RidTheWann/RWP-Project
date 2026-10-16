@@ -1,248 +1,222 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Evidence-based gaming and streaming performance analyzer"
-    />
-    <title>RidTheWann Performance</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">RIDTHEWANN PERFORMANCE</p>
-          <h1>Measure. Diagnose. Prove.</h1>
-          <p class="subtitle">
-            Local Windows capture with PresentMon and system telemetry.
-          </p>
-        </div>
-        <div class="session" id="connection">
-          <span class="status-dot" id="status-dot"></span>
-          <span id="connection-label">LOCAL SESSION</span>
-        </div>
-      </header>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Local, evidence-based game performance measurements for Windows.">
+  <title>RWP — Ukur performa game Anda</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" data-view="home" aria-label="RWP — Beranda">RWP</a>
+      <nav class="main-nav" aria-label="Navigasi utama">
+        <button class="nav-button active" type="button" data-view="home" data-i18n="navHome">Beranda</button>
+        <button class="nav-button" type="button" data-view="history" data-i18n="navHistory">Riwayat</button>
+        <button class="nav-button" type="button" data-view="settings" data-i18n="navSettings">Pengaturan</button>
+      </nav>
+    </header>
 
-      <section class="capture-card">
-        <div class="capture-head">
-          <div>
-            <p class="eyebrow">LIVE SESSION</p>
-            <h2>Capture</h2>
+    <main id="main-content">
+      <section class="view active" id="view-home" aria-labelledby="home-title">
+        <header class="page-heading">
+          <p class="eyebrow" data-i18n="homeEyebrow">PERFORMA GAME</p>
+          <h1 id="home-title" data-i18n="homeTitle">Ukur performa game Anda</h1>
+          <p class="subtitle" data-i18n="homeSubtitle">Lihat hasil pengukuran performa game di PC Anda.</p>
+        </header>
+
+        <section class="panel" aria-labelledby="game-heading">
+          <div class="section-heading">
+            <div><h2 id="game-heading" data-i18n="gameLabel">Pilih game</h2><p class="muted" data-i18n="gameHint">Pilih aplikasi yang ingin Anda ukur.</p></div>
+            <button class="button secondary small" type="button" id="refresh-processes" data-i18n="refresh">Segarkan</button>
           </div>
-          <span class="muted" id="session-message">Ready</span>
-        </div>
+          <label class="field-label" for="process-select" data-i18n="runningApps">Aplikasi yang sedang berjalan</label>
+          <select id="process-select" class="input" aria-describedby="game-empty">
+            <option value="" data-i18n="chooseApp">Pilih aplikasi</option>
+          </select>
+          <p class="helper empty-state-copy" id="game-empty" hidden data-i18n="gameEmpty">Buka game Anda dulu, lalu Segarkan.</p>
+          <p class="helper" id="process-status" role="status" aria-live="polite"></p>
+        </section>
 
-        <div class="capture-grid">
-          <label>
-            <span>PresentMon executable</span>
-            <input id="presentmon-executable" type="text" placeholder="C:\Tools\PresentMon.exe" autocomplete="off" />
-            <button class="ghost" id="browse-presentmon" type="button">Browse</button>
-          </label>
-          <label>
-            <span>Output CSV</span>
-            <input id="output-file" type="text" placeholder="C:\Captures\session.csv" autocomplete="off" />
-            <button class="ghost" id="browse-output" type="button">Browse</button>
-          </label>
-          <label>
-            <span>Target process</span>
-            <select id="process-select"><option value="">Select a live process</option></select>
-            <button class="ghost" id="refresh-processes" type="button">Refresh</button>
-          </label>
-          <label>
-            <span>Target PID</span>
-            <input id="process-id" type="number" min="1" step="1" placeholder="1234" />
-          </label>
-          <label>
-            <span>Duration (s)</span>
-            <input id="duration-seconds" type="number" min="1" max="3600" step="1" value="60" />
-          </label>
-          <label>
-            <span>Telemetry interval (ms)</span>
-            <input id="sample-interval-ms" type="number" min="10" max="5000" step="1" value="50" />
-          </label>
-          <label class="checkbox-row">
-            <input id="exclude-dropped" type="checkbox" />
-            <span>Exclude dropped presents</span>
-          </label>
-          <label class="checkbox-row">
-            <input id="no-process-probing" type="checkbox" />
-            <span>Disable process/thread telemetry probing</span>
-          </label>
-          <label class="checkbox-row">
-            <input id="notify-stable" type="checkbox" checked />
-            <span>Notify when stable</span>
-          </label>
-        </div>
+        <section class="panel" aria-labelledby="readiness-title">
+          <h2 id="readiness-title" data-i18n="readinessTitle">Kesiapan pengukuran</h2>
+          <div class="readiness-row">
+            <span class="status-icon" aria-hidden="true" id="permission-icon">•</span>
+            <div class="readiness-copy"><span class="readiness-label" data-i18n="permissionLabel">Izin pengukuran</span><strong id="permission-status" class="status-value">Memeriksa…</strong></div>
+            <button class="text-button" id="permission-fix" type="button" data-i18n="fixIt" hidden>Lihat cara memperbaiki</button>
+          </div>
+          <div class="readiness-row">
+            <span class="status-icon" aria-hidden="true" id="component-icon">•</span>
+            <div class="readiness-copy"><span class="readiness-label" data-i18n="componentLabel">Komponen pengukuran</span><strong id="component-status" class="status-value">Memeriksa…</strong></div>
+            <button class="text-button" id="component-setup" type="button" data-i18n="setupComponent" hidden>Siapkan komponen</button>
+          </div>
+          <p class="helper" id="readiness-note" data-i18n="readinessNote">RWP akan memeriksa ulang sebelum mulai mengukur.</p>
+        </section>
 
-        <div class="capture-actions">
-          <button class="primary" id="start-session">Start capture</button>
-          <button class="secondary" id="stop-session" disabled>Stop</button>
-          <button class="ghost" id="reset-session">Reset</button>
-        </div>
+        <section class="panel" aria-labelledby="quick-options-title">
+          <h2 id="quick-options-title" data-i18n="quickOptions">Pilihan pengukuran</h2>
+          <fieldset class="choice-group">
+            <legend data-i18n="prepLabel">Waktu bersiap</legend>
+            <div class="choice-row">
+              <label class="choice"><input type="radio" name="prep-home" value="5" data-prep-choice checked><span data-i18n="prep5">5 detik</span></label>
+              <label class="choice"><input type="radio" name="prep-home" value="10" data-prep-choice><span data-i18n="prep10">10 detik</span></label>
+              <label class="choice"><input type="radio" name="prep-home" value="15" data-prep-choice><span data-i18n="prep15">15 detik</span></label>
+            </div>
+          </fieldset>
+          <label class="toggle-row">
+            <input id="notify-stable-home" type="checkbox" data-notify-stable checked>
+            <span><strong data-i18n="notifyStable">Beri tahu saya jika hasilnya stabil</strong><small data-i18n="notifyStableHint">Notifikasi hanya muncul setelah pengukuran selesai.</small></span>
+          </label>
+        </section>
 
-        <div id="capture-progress" style="display:none;margin-top:12px;background:#222;border-radius:4px;height:8px;">
-          <div id="capture-progress-fill" style="height:100%;width:0%;background:#4caf50;border-radius:4px;"></div>
+        <div class="primary-action-row">
+          <button class="button primary large" type="button" id="start-session" disabled data-i18n="startMeasure">Mulai ukur</button>
+          <p class="helper" id="home-message" role="status" aria-live="polite"></p>
         </div>
-        <p class="capture-note" id="session-remediation" style="display:none;"></p>
-
-        <p class="capture-note" id="runtime-note">
-          PresentMon runs out-of-process. The session backend shares one QPC timebase
-          between PresentMon frame timestamps and Windows telemetry. Disabling process
-          probing keeps system CPU/RAM telemetry and PresentMon frame capture, but omits
-          per-process thread/background activity and target-GPU telemetry.
-        </p>
       </section>
 
-      <nav class="tabs" aria-label="Dashboard">
-        <button class="tab active" data-tab="overview">Overview</button>
-        <button class="tab" data-tab="stutters">Stutters</button>
-        <button class="tab" data-tab="diagnostics">Diagnostics</button>
-        <button class="tab" data-tab="compare">Compare</button>
-      </nav>
-
-      <main>
-        <section class="capture-card" id="history-card">
-          <div class="capture-head">
-            <div>
-              <p class="eyebrow">PERSISTED SESSIONS</p>
-              <h2>History</h2>
+      <section class="view" id="view-measure" aria-labelledby="measure-title" hidden>
+        <div class="measure-frame">
+          <div class="brand-small">RWP</div>
+          <section id="countdown-stage" class="measure-state" hidden aria-labelledby="countdown-title">
+            <p class="eyebrow" data-i18n="countdownEyebrow">BERSIAP</p>
+            <h1 id="countdown-title" data-i18n="countdownTitle">Bersiap mengukur</h1>
+            <p class="subtitle prominent" data-i18n="countdownBody">Pindah ke game Anda.</p>
+            <div class="countdown-number" id="countdown-number" aria-hidden="true">5</div>
+            <p class="helper" data-i18n="countdownHint">Pengukuran dimulai setelah hitung mundur.</p>
+            <p class="sr-only" id="countdown-announcement" aria-live="polite" aria-atomic="true"></p>
+            <button class="button secondary" type="button" id="cancel-countdown" data-i18n="cancel">Batalkan</button>
+          </section>
+          <section id="recording-stage" class="measure-state" hidden aria-labelledby="recording-title">
+            <p class="eyebrow" data-i18n="measureEyebrow">PENGUKURAN BERLANGSUNG</p>
+            <h1 id="recording-title" data-i18n="recordingTitle">Sedang merekam</h1>
+            <p class="subtitle" data-i18n="recordingBody">Mainkan seperti biasa; hasil muncul setelah selesai.</p>
+            <div class="elapsed-time" id="elapsed-duration">00:00 / 01:00</div>
+            <div id="recording-progress" class="progress-track" role="progressbar" aria-label="Progres pengukuran" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0%">
+              <div id="progress-fill" class="progress-fill"></div>
             </div>
-            <button class="ghost" id="refresh-history">Refresh</button>
+            <p class="progress-caption" id="progress-caption">0%</p>
+            <p class="muted" data-i18n="recordingFooter">Hasil akan muncul setelah pengukuran selesai.</p>
+            <button class="button danger" type="button" id="stop-measurement" data-i18n="stopMeasure">Hentikan pengukuran</button>
+          </section>
+          <section id="analyzing-stage" class="measure-state" hidden aria-labelledby="analyzing-title">
+            <p class="eyebrow" data-i18n="analyzingEyebrow">TAHAP AKHIR</p>
+            <h1 id="analyzing-title" data-i18n="analyzingTitle">Menganalisis…</h1>
+            <p class="subtitle" data-i18n="analyzingBody">Menyiapkan hasil pengukuran Anda.</p>
+            <div class="loading-mark" aria-hidden="true"></div>
+            <button class="button secondary" type="button" disabled data-i18n="stopMeasure">Hentikan pengukuran</button>
+            <p class="helper" data-i18n="analyzingHint">RWP sedang menyelesaikan hasil. Tombol berhenti dinonaktifkan.</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-result" aria-labelledby="result-title" hidden>
+        <header class="page-heading compact-heading">
+          <p class="eyebrow" data-i18n="resultEyebrow">HASIL PENGUKURAN</p>
+          <h1 id="result-title" data-i18n="resultHeading">Hasil pengukuran</h1>
+          <p class="subtitle" id="result-meta"></p>
+        </header>
+        <section class="panel" id="result-success-panel">
+          <div class="result-outcome" id="result-outcome"></div>
+          <h2 id="verdict-title">Belum bisa disimpulkan</h2>
+          <div class="reason-block"><h3 data-i18n="reasonLabel">Alasan</h3><p id="verdict-reason"></p></div>
+          <div class="advice-block"><h3 data-i18n="adviceLabel">Saran berikutnya</h3><p id="verdict-advice"></p></div>
+          <section class="stability-card" aria-labelledby="stability-heading">
+            <div class="stability-heading"><span class="status-dot unknown" id="stability-dot" aria-hidden="true"></span><h3 id="stability-heading" data-i18n="stabilityUnknown">Stabilitas belum diketahui</h3></div>
+            <p id="stability-description"></p>
+            <div class="stability-stats"><span id="stability-observations"></span><span id="stability-stutters"></span></div>
+          </section>
+          <section id="other-diagnoses-section" class="other-diagnoses" hidden aria-labelledby="other-diagnoses-title">
+            <h3 id="other-diagnoses-title" data-i18n="alsoDetected">Juga terdeteksi</h3><ul id="other-diagnoses-list"></ul>
+          </section>
+          <details class="expert-details"><summary data-i18n="expertDetails">Detail untuk ahli</summary><div id="expert-content" class="expert-content"></div></details>
+          <div class="result-actions">
+            <button class="button primary" type="button" id="measure-again" data-i18n="measureAgain">Ukur lagi</button>
+            <button class="button secondary" type="button" id="compare-from-result" data-i18n="compare">Bandingkan</button>
           </div>
-          <div id="history-list" class="diagnostics">
-            <div class="diagnostic-placeholder"><div><h3>No persisted sessions</h3><p>Completed GUI captures appear here after manifest verification.</p></div></div>
-          </div>
+          <p class="helper" id="result-compare-explanation" hidden data-i18n="compareDisabled">Belum ada pengukuran lain dari game yang sama untuk dibandingkan.</p>
         </section>
-
-        <section class="panel active" data-panel="overview">
-          <div class="cards">
-            <article class="card" data-metric="average_fps">
-              <span class="label">AVERAGE FPS</span>
-              <strong>—</strong>
-              <small>Waiting for capture</small>
-            </article>
-            <article class="card" data-metric="p99_frame_time">
-              <span class="label">P99 FRAME TIME</span>
-              <strong>—</strong>
-              <small>Tail latency</small>
-            </article>
-            <article class="card" data-metric="one_percent_low">
-              <span class="label">1% LOW</span>
-              <strong>—</strong>
-              <small>Waiting for capture</small>
-            </article>
-            <article class="card" data-metric="stutter_events">
-              <span class="label">STUTTER EVENTS</span>
-              <strong>—</strong>
-              <small>Local-median detector</small>
-            </article>
-          </div>
-
-          <div class="result-summary" id="result-summary">
-            <div>
-              <span class="label">SESSION</span>
-              <strong id="result-title">No capture loaded</strong>
-              <p id="result-detail">
-                Start a timed capture to populate the deterministic analysis model.
-              </p>
-            </div>
-            <div class="result-meta">
-              <span id="result-frames">0 frames</span>
-              <span id="result-telemetry">0 telemetry samples</span>
-            </div>
-            <p class="capture-note" id="stability-banner">Stability unknown — start a capture.</p>
-          </div>
+        <section class="panel failure-panel" id="result-failure-panel" hidden>
+          <div class="failure-symbol" aria-hidden="true">!</div>
+          <h2 id="failure-title" data-i18n="errorUnknownTitle">Terjadi masalah yang tidak terduga</h2>
+          <p id="failure-body" class="subtitle"></p><p id="failure-advice" class="helper"></p>
+          <details class="expert-details"><summary data-i18n="technicalDetails">Detail teknis</summary><pre id="technical-error"></pre><button class="button secondary small" type="button" id="copy-technical" data-i18n="copyTechnical">Salin detail teknis</button></details>
+          <div class="result-actions"><button class="button primary" type="button" id="retry-action" data-i18n="retry">Coba lagi</button></div>
         </section>
+      </section>
 
-        <section class="panel" data-panel="stutters">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">FRAME PACING</p>
-              <h2>Stutter events</h2>
+      <section class="view" id="view-history" aria-labelledby="history-title" hidden>
+        <header class="page-heading">
+          <p class="eyebrow" data-i18n="historyEyebrow">HASIL TERSIMPAN LOKAL</p><h1 id="history-title" data-i18n="historyTitle">Riwayat pengukuran</h1>
+          <p class="subtitle" data-i18n="historySubtitle">Pilih pengukuran untuk melihat hasil atau membandingkannya.</p>
+        </header>
+        <div class="section-heading"><h2 data-i18n="savedMeasurements">Pengukuran tersimpan</h2><button class="button secondary small" type="button" id="refresh-history" data-i18n="refresh">Segarkan</button></div>
+        <p class="helper" id="history-message" role="status" aria-live="polite"></p>
+        <div id="history-list" class="history-list">
+          <div class="empty-panel"><h3 data-i18n="historyEmptyTitle">Belum ada riwayat pengukuran</h3><p data-i18n="historyEmptyBody">Pengukuran yang tersimpan akan muncul di sini.</p><button class="button secondary" type="button" data-view="home" data-i18n="measureGame">Ukur game</button></div>
+        </div>
+        <section class="panel compare-panel" aria-labelledby="compare-title">
+          <div class="section-heading"><div><h2 id="compare-title" data-i18n="compareTitle">Sebelum / Sesudah</h2><p class="muted" data-i18n="compareHint">Pilih sesi dari daftar di atas dengan tombol Sebelum atau Sesudah.</p></div></div>
+          <div class="compare-selection">
+            <div class="selection-box"><span class="field-label" data-i18n="beforeLabel">Sebelum</span><strong id="before-label" data-i18n="notSelected">Belum dipilih</strong></div>
+            <div class="selection-box"><span class="field-label" data-i18n="afterLabel">Sesudah</span><strong id="after-label" data-i18n="notSelected">Belum dipilih</strong></div>
+          </div>
+          <fieldset class="choice-group"><legend data-i18n="scenarioQuestion">Apakah kondisi kedua pengukuran cukup serupa?</legend>
+            <div class="scenario-options">
+              <label class="choice"><input type="radio" name="same-scenario" value="yes"><span data-i18n="scenarioYes">Ya, kondisinya sebanding</span></label>
+              <label class="choice"><input type="radio" name="same-scenario" value="unsure"><span data-i18n="scenarioUnsure">Tidak yakin</span></label>
+              <label class="choice"><input type="radio" name="same-scenario" value="no"><span data-i18n="scenarioNo">Tidak, kondisinya berbeda</span></label>
             </div>
-            <span class="muted" id="stutter-count">No capture loaded</span>
-          </div>
-          <div class="table-wrap">
-            <canvas id="stutter-chart" width="640" height="160" style="width:100%;height:auto;"></canvas>
-            <table>
-              <thead>
-                <tr>
-                  <th>Start</th>
-                  <th>Duration</th>
-                  <th>Peak</th>
-                  <th>Baseline</th>
-                  <th>Candidates</th>
-                </tr>
-              </thead>
-              <tbody id="stutter-body">
-                <tr><td colspan="5" class="empty-row">No capture loaded</td></tr>
-              </tbody>
-            </table>
-          </div>
+          </fieldset>
+          <p class="helper" id="compare-guidance" data-i18n="compareSelectHint">Pilih dua pengukuran terverifikasi dari aplikasi yang sama.</p>
+          <button class="button primary" type="button" id="run-compare" disabled data-i18n="compareAction">Bandingkan hasil</button>
+          <section id="compare-result" class="comparison-result" hidden aria-live="polite"><h3 id="compare-status-title"></h3><p id="compare-status-body"></p><dl id="compare-metrics" class="compare-metrics"></dl></section>
         </section>
+      </section>
 
-        <section class="panel" data-panel="diagnostics">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">EVIDENCE</p>
-              <h2>Diagnostics</h2>
-            </div>
-            <span class="muted" id="diagnostic-count">Unknown until measured</span>
-          </div>
-          <div class="diagnostics" id="diagnostic-list">
-            <div class="diagnostic-placeholder">
-              <div class="score">—<span>/100</span></div>
-              <div>
-                <h3>No diagnosis yet</h3>
-                <p>Evidence scores are heuristics, not probabilities.</p>
-              </div>
-            </div>
-          </div>
+      <section class="view" id="view-settings" aria-labelledby="settings-title" hidden>
+        <header class="page-heading"><p class="eyebrow" data-i18n="settingsEyebrow">PREFERENSI LOKAL</p><h1 id="settings-title" data-i18n="settingsTitle">Pengaturan</h1></header>
+        <section class="panel settings-panel">
+          <label class="field-label" for="language-setting" data-i18n="languageLabel">Bahasa</label>
+          <select class="input" id="language-setting"><option value="auto" data-i18n="languageAuto">Ikuti bahasa Windows</option><option value="id">Bahasa Indonesia</option><option value="en">English</option></select>
+          <fieldset class="choice-group"><legend data-i18n="prepLabel">Waktu bersiap</legend><div class="choice-row">
+            <label class="choice"><input type="radio" name="prep-settings" value="5" data-prep-choice><span data-i18n="prep5">5 detik</span></label>
+            <label class="choice"><input type="radio" name="prep-settings" value="10" data-prep-choice><span data-i18n="prep10">10 detik</span></label>
+            <label class="choice"><input type="radio" name="prep-settings" value="15" data-prep-choice><span data-i18n="prep15">15 detik</span></label>
+          </div></fieldset>
+          <label class="toggle-row"><input id="notify-stable-settings" type="checkbox" data-notify-stable checked><span><strong data-i18n="notifyStable">Beri tahu saya jika hasilnya stabil</strong><small data-i18n="notifyStableHint">Notifikasi hanya muncul setelah pengukuran selesai.</small></span></label>
+          <details class="advanced-settings">
+            <summary data-i18n="advancedSettings">Pengaturan lanjutan</summary>
+            <p class="helper" data-i18n="advancedWarning">Pengaturan ini dapat memengaruhi data yang dikumpulkan. Ubah hanya jika Anda memahami dampaknya.</p>
+            <label class="field-label" for="duration-seconds" data-i18n="durationLabel">Durasi pengukuran (detik)</label><input class="input narrow-input" id="duration-seconds" type="number" min="1" max="3600" step="1" value="60">
+            <label class="field-label" for="sample-interval-ms" data-i18n="intervalLabel">Interval telemetri (ms)</label><input class="input narrow-input" id="sample-interval-ms" type="number" min="10" max="5000" step="1" value="50">
+            <label class="toggle-row compact-toggle"><input id="exclude-dropped" type="checkbox"><span data-i18n="excludeDropped">Kecualikan frame yang terlewat</span></label>
+            <label class="toggle-row compact-toggle"><input id="no-process-probing" type="checkbox"><span data-i18n="noProcessProbing">Nonaktifkan pemeriksaan thread/proses tambahan</span></label>
+            <label class="field-label" for="presentmon-path" data-i18n="presentmonPath">Lokasi PresentMon</label>
+            <div class="inline-field"><input class="input" id="presentmon-path" type="text" autocomplete="off" spellcheck="false"><button class="button secondary" type="button" id="browse-presentmon-settings" data-i18n="browse">Pilih file</button></div>
+            <p class="helper" data-i18n="presentmonPrivacy">Lokasi ini disimpan di perangkat Anda dan tidak dikirim melalui jaringan.</p>
+          </details>
+          <div class="settings-actions"><button class="button primary" type="button" id="save-settings" data-i18n="saveSettings">Simpan pengaturan</button></div>
+          <p id="settings-message" class="helper" role="status" aria-live="polite"></p>
         </section>
+      </section>
+    </main>
+  </div>
 
-        <section class="panel" data-panel="compare">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">A/B</p>
-              <h2>Baseline vs candidate</h2>
-            </div>
-            <span class="muted">Select two verified persisted sessions.</span>
-          </div>
-          <div class="compare-controls">
-            <label>
-              <span>Baseline</span>
-              <select id="compare-baseline"><option value="">Select a verified session</option></select>
-            </label>
-            <label>
-              <span>Candidate</span>
-              <select id="compare-candidate"><option value="">Select a verified session</option></select>
-            </label>
-            <label class="checkbox-row">
-              <input id="compare-same-scenario" type="checkbox" checked />
-              <span>Same intended scenario</span>
-            </label>
-            <button class="secondary" id="run-compare">Compare sessions</button>
-          </div>
-          <div class="comparison-grid">
-            <div class="compare-card">
-              <span class="label">P99 CHANGE</span>
-              <strong id="compare-p99">—</strong>
-            </div>
-            <div class="compare-card">
-              <span class="label">AVERAGE FPS</span>
-              <strong id="compare-fps">—</strong>
-            </div>
-            <div class="compare-card">
-              <span class="label">STUTTERS</span>
-              <strong id="compare-stutters">—</strong>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-    <script src="./app.js"></script>
-  </body>
+  <dialog id="stop-dialog" class="dialog"><div class="dialog-content">
+    <h2 data-i18n="stopConfirmTitle">Hentikan pengukuran?</h2><p data-i18n="stopConfirmBody">Hasil mungkin belum cukup untuk menarik kesimpulan. Data yang tersedia tetap akan dianalisis sebagai hasil yang dihentikan lebih awal.</p>
+    <div class="dialog-actions"><button class="button secondary" type="button" id="continue-measuring" data-i18n="continueMeasure">Lanjut mengukur</button><button class="button danger" type="button" id="confirm-stop" data-i18n="stopNow">Hentikan sekarang</button></div>
+  </div></dialog>
+  <dialog id="close-dialog" class="dialog"><div class="dialog-content">
+    <h2 data-i18n="closeConfirmTitle">Pengukuran masih berlangsung</h2><p data-i18n="closeConfirmBody">Jika Anda menutup RWP, pengukuran akan dihentikan dan RWP akan mencoba menyimpan data yang tersedia.</p>
+    <div class="dialog-actions"><button class="button secondary" type="button" id="stay-in-app" data-i18n="stayOpen">Tetap di RWP</button><button class="button danger" type="button" id="confirm-close-app" data-i18n="closeAndStop">Tutup dan hentikan pengukuran</button></div>
+  </div></dialog>
+  <dialog id="repair-dialog" class="dialog"><div class="dialog-content">
+    <h2 id="repair-title" data-i18n="permissionRepairTitle">Izin Windows diperlukan</h2><div id="repair-body" class="dialog-copy"></div>
+    <div class="dialog-actions"><button class="button primary" type="button" id="repair-done" data-i18n="understood">Mengerti</button></div>
+  </div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="./app.js"></script>
+</body>
 </html>
