@@ -104,6 +104,13 @@ class UiContractTests(unittest.TestCase):
             f"missing request fields: {required_fields - sent_fields}",
         )
 
+    def test_stability_is_not_inferred_from_stutter_count(self) -> None:
+        self.assertIn('const status = stable ? "stable" : "unknown";', self.js)
+        self.assertNotIn('stutters.length>0 ? "unstable"', self.js)
+        self.assertIn("const rawFrameCount = snapshot.frame_count;", self.js)
+        self.assertIn("const rawStutters = dashboard.stutters;", self.js)
+        self.assertIn('frameCount === null ? t("noData")', self.js)
+        self.assertIn('stutters === null', self.js)
     def test_close_event_permission_is_explicit(self) -> None:
         self.assertIn("core:event:default", self.capability["permissions"])
         self.assertIn("rwp-window-close-requested", self.js)
