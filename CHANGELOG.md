@@ -21,6 +21,10 @@ No user-facing changes yet since `0.5.0-beta`.
 - Keep PresentMon user-supplied per ADR-0028; hide executable/output paths, process IDs, and technical tuning from the ordinary player path.
 - Preserve engine-provided diagnostics and evidence in Expert details; use a conservative "Belum bisa disimpulkan" fallback when the existing output does not support a conclusion.
 
+### Fixed
+
+- Ensure the managed temporary PresentMon CSV is cleaned up when a capture worker returns or unwinds, and explicitly authorize the native window-close event listener used by the close-confirmation guard.
+
 ## [0.4.0-beta] - 2026-10-16
 
 ### Fixed

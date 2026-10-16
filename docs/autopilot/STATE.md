@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T19:40:01+07:00
-repo_ref: "main @ 4e4f1de (0.5.0-beta candidate implementation/docs; publication pending)"
-active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; final CI pending; packaged Windows smoke UNVERIFIED)"
+last_updated: 2026-10-16T20:51:00+07:00
+repo_ref: "main @ 410f33f (managed-output cleanup + close-event ACL; contract tests/docs follow in next commit)"
+active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; post-follow-up CI pending; packaged Windows smoke UNVERIFIED)"
 ---
 
-## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; final-main CI pending; hardware acceptance remains BLOCKED_ON_USER)
+## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; post-follow-up CI pending; hardware acceptance remains BLOCKED_ON_USER)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; final CI pending; packa
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-16 UX-REDESIGN-FOLLOWUP (directly on main): corrected managed-output cleanup to run on normal return and worker unwind via RAII, added its regression test, and explicitly included `core:event:default` for the main-window close listener. Added static UI contract tests for DOM-ID references, local-only web assets/CSP, Advanced-only PresentMon path, IPC request field parity, and close-event permissions; updated GUI acceptance and CHANGELOG. Last fully green CI before this follow-up: run 38902154614 on main @ 1896d4d (Windows gates PASS: fmt, Clippy, tests, deny, audit, schema/docs/unit/links/workflow-security; Windows debug workspace build PASS). That result does not cover commits after 1896d4d; CI for this candidate must be checked on its actual HEAD. No local checkout-based gate was run in this execution. Packaged NSIS/manual GUI smoke, installed notifications, high-DPI/accessibility contrast and real PresentMon/hardware acceptance remain UNVERIFIED/BLOCKED_ON_USER. GitHub tag/pre-release publication remains pending.
+
 - 2026-10-16 UX-REDESIGN-0.5.0-BETA (source/code and docs committed directly to main): replaced the native web shell with Home, separate deadline-based Countdown/Recording/Analyzing states, friendly Results, History/Before-After and Settings/Advanced; added additive managed capture/preflight/error-kind/window-close/notification IPC and updated command permission allowlists; localized diagnosis/result/error copy; bumped workspace and local path dependencies, Cargo.lock local packages and Tauri config to 0.5.0-beta; lowered Tauri minimum window size to 900x600; added release candidate notes and GUI acceptance checklist. No external dependency added, no analysis threshold/rule/schema changed. CI run 38901345257 passed the gate job on an intermediate candidate revision (fmt/clippy/workspace tests 358 passed/0 failed/deny/audit/schema/docs/unit/link/security); its later Windows debug-build job did not complete before subsequent version/docs commits. CI for the current main HEAD must be checked separately. Packaged Windows smoke tests, minimized countdown, installed native notifications, close lifecycle, actual PresentMon capture and GUI accessibility measurements remain NOT RUN/UNVERIFIED. The GitHub tag/release has not been proven published; existing RC-05 overhead and RC-07/RC-12 hardware acceptance blockers remain.
 
 
@@ -108,7 +110,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; final CI pending; packa
 
 ## NEXT
 
-Check the final CI run for the latest main commit; fix any real failures without weakening gates, then determine whether the available GitHub integration can publish tag v0.5.0-beta. Do not claim a published release or Windows runtime acceptance without evidence.
+Check the Windows gates and debug build for the post-410f33f candidate (including the new static UI contract tests); fix actual failures without weakening gates, then complete release publication only through a verified tag/release operation. Do not claim a published release, packaged-installer smoke, or real PresentMon acceptance without evidence.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.

@@ -38,17 +38,24 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 
 ## Capture
 
+- [ ] Home keeps Start disabled until permission, PresentMon component, and selected-process preflight checks are ready.
+- [ ] Ordinary Home/Result views do not show the PresentMon path, output paths, process ID, sampling interval, or raw evidence.
+- [ ] PresentMon path and telemetry tuning are available only under Settings → Advanced.
+- [ ] The preparation countdown uses a monotonic deadline and remains correct when the window is minimized/backgrounded, then regains focus.
 - [ ] GUI rejects an invalid PresentMon executable path.
 - [ ] GUI rejects a path that is not a regular file.
 - [ ] GUI rejects an executable whose basename is not `PresentMon.exe`.
 - [ ] GUI reports missing PresentMon permissions with a remediation message.
 - [ ] Starting a capture shows the Running state with the target PID.
-- [ ] Stop requests cancellation and the capture reaches a terminal state.
+- [ ] Stop requests cancellation once, displays Analyzing while the backend remains Running, and waits for a terminal status.
+- [ ] Closing the window during countdown/measurement opens a confirmation; confirm-stop waits for terminal session state before closing.
+- [ ] A managed temporary CSV is removed after both normal completion and worker unwind; the verified persisted session retains its source CSV.
 - [ ] Closing the application does not leave an unowned PresentMon child process.
 - [ ] Interrupted capture is represented as interrupted capture state, not a generic failed analysis.
 - [ ] "Notify when stable" is checked by default; unchecking it suppresses only the toast, never the banner.
 - [ ] A completed capture shows Stable only when the existing stability.v1 diagnosis fires; an observed stutter may show Not stable, while all other unsupported cases remain Stability unknown. The UI must not infer Stable from absence of a diagnosis.
 - [ ] Disabling the notification or running where toasts are refused still leaves the banner as the source of truth.
+- [ ] Installed-package tests verify generic completion and Stable notifications; notifications do not expose app name, PID, executable path, or output path.
 
 ## Persistence and history
 
@@ -77,6 +84,12 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 ## Evidence
 
 Record pass/fail, exact build SHA, session manifest SHA-256, PresentMon SHA-256, and remediation for each failed item. Do not attach unredacted diagnostic bundles to public issues.
+
+The static native UI contract regressions run with the regular Python unit gate:
+
+```powershell
+python -m unittest discover -s tools -v
+```
 
 For the real-PresentMon CLI smoke flow (doctor, import, analyze, report,
 compare with redacted summary), follow `smoke-test.md`.
