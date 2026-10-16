@@ -1,8 +1,6 @@
 # Changelog
 
-Versioning follows Semantic Versioning; the tree is at `0.2.0` after the
-post-alpha console-stop work (tags `v0.1.0-alpha` and `v0.2.0-alpha` published
-as GitHub pre-releases; their notes stay frozen under their sections below).
+Versioning follows Semantic Versioning. The current source candidate targets `0.5.0-beta`; historical alpha/beta entries remain frozen under their original sections.
 Entry format: one bullet per user-facing change under
 `Added`/`Changed`/`Fixed`/`Security`; process-only work is recorded in
 `docs/autopilot/STATE.md`, never here (CI-era process entries moved to
@@ -10,7 +8,18 @@ Entry format: one bullet per user-facing change under
 
 ## Unreleased
 
-No user-facing changes yet since `0.4.0-beta`.
+No user-facing changes yet since `0.5.0-beta`.
+
+## [0.5.0-beta] - 2026-10-16
+
+### Added
+- Redesign the native Windows UI around Home, exclusive countdown/recording/analyzing states, friendly results, history/Before-After comparison, and Settings/Advanced using local vanilla HTML/CSS/JavaScript.
+- Add a managed capture command, Home preflight status for permissions/component/process, structured UI error kinds, post-completion generic native notification, and ID/EN notification copy.
+- Add a main-window close-request guard and a completed-snapshot interruption flag for the UI while preserving existing commands and persisted schemas.
+
+### Changed
+- Keep PresentMon user-supplied per ADR-0028; hide executable/output paths, process IDs, and technical tuning from the ordinary player path.
+- Preserve engine-provided diagnostics and evidence in Expert details; use a conservative "Belum bisa disimpulkan" fallback when the existing output does not support a conclusion.
 
 ## [0.4.0-beta] - 2026-10-16
 

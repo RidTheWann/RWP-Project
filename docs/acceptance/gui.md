@@ -19,6 +19,23 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 - [ ] GPU/vendor/driver recorded.
 - [ ] Network disconnected for the offline-first acceptance pass.
 
+## Redesigned UX (0.5.0-beta candidate)
+
+- [ ] First run checks Windows permission and the user-supplied PresentMon component before Start can be enabled.
+- [ ] The ordinary Home view hides PresentMon path, output CSV path, PID, and telemetry tuning.
+- [ ] The empty game-list state says to open the game and refresh; application selection remains manual because name + PID do not classify a game.
+- [ ] Preparation settings accept 5, 10, and 15 seconds and are stored locally only.
+- [ ] Countdown uses a monotonic deadline and starts capture only after reaching zero; cancel never invokes session_start.
+- [ ] Minimize RWP during the countdown, return to the game, then restore the window; verify countdown and capture start timing (NOT RUN until Windows smoke test).
+- [ ] Recording shows elapsed/requested duration and a progressbar only; no live FPS or verdict is shown.
+- [ ] Stop displays a generic early-stop confirmation, requests cancellation once, and keeps the UI in Analyzing until Completed or Failed.
+- [ ] Failure view presents friendly localized copy and a single retry/repair action; unknown failure provides a technical-detail copy action.
+- [ ] Stable and completion notifications are tested from an installed Windows package; toasts are best-effort and never include process identity.
+- [ ] Close the window during countdown and capture; verify Stay, confirmed close, child cleanup and terminal-state races.
+- [ ] Compare selector disables unverified sessions; Yes sends same_scenario=true, while Not sure and No both send false.
+- [ ] Compare shows only Comparable, LimitedSampleEquivalence, or InconclusiveDifferentScenario and never shows numeric deltas for an inconclusive scenario.
+- [ ] Verify UI at 900×600, 1120×720 and 1360×860, 125%/150% display scaling, forced-colors, reduced motion, and keyboard/screen reader paths.
+
 ## Capture
 
 - [ ] GUI rejects an invalid PresentMon executable path.
@@ -30,7 +47,7 @@ This checklist is the manual acceptance companion for WP4/WP5. Execute it on a r
 - [ ] Closing the application does not leave an unowned PresentMon child process.
 - [ ] Interrupted capture is represented as interrupted capture state, not a generic failed analysis.
 - [ ] "Notify when stable" is checked by default; unchecking it suppresses only the toast, never the banner.
-- [ ] A stable completed capture shows the Stable banner state; other outcomes show Not stable or Stability unknown, never a stale verdict.
+- [ ] A completed capture shows Stable only when the existing stability.v1 diagnosis fires; an observed stutter may show Not stable, while all other unsupported cases remain Stability unknown. The UI must not infer Stable from absence of a diagnosis.
 - [ ] Disabling the notification or running where toasts are refused still leaves the banner as the source of truth.
 
 ## Persistence and history

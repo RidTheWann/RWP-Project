@@ -9,10 +9,11 @@ installer built and published automatically by
 Release notes for the third alpha: `0.3.0-alpha.md` (tag `v0.3.0-alpha`;
 same automation; the release body carries the CHANGELOG section).
 
-Release notes for the first beta: `0.4.0-beta.md` (tag `v0.4.0-beta`;
-same automation; the release workflow also triggers on `v*-beta*` tags).
+Release notes for the first beta: `0.4.0-beta.md` (tag `v0.4.0-beta`; same automation).
 
-Unreleased tree (post-`0.4.0-beta`, version `0.4.0` in tree): `unreleased.md`.
+Release candidate notes for the next beta: `0.5.0-beta.md` (target tag `v0.5.0-beta`; the current manifest bump and candidate gates are in progress; the tag/release is not yet published).
+
+Unreleased notes and known limits: `unreleased.md`.
 
 Unsigned alpha artifacts. Binaries are never committed; the text artifacts
 below are generated locally and hashed into `provenance.json`.

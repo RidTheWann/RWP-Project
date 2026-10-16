@@ -2,7 +2,7 @@
 
 Status: MENGIKAT sejak Fase 0. Sejak 2026-10-16 repo memiliki workflow
 `.github/workflows/` (`ci.yml` gates + debug build per push/PR ke `main`,
-`release-alpha.yml` NSIS + pre-release hanya pada tag `v*-alpha*`) atas
+`release-alpha.yml` NSIS + pre-release pada tag `v*-alpha*` dan `v*-beta*`) atas
 perintah owner sebagai suplemen — bukan pengganti. Remote GitHub dipakai
 untuk publish (branch `main` + tag alpha, atas perintah owner). Gate lokal di
 bawah tetap satu-satunya otoritas verifikasi per batch; CI yang merah tidak
@@ -46,9 +46,7 @@ Semua perintah memakai `--locked` di mana didukung (`Cargo.lock` ter-commit).
 `fuzz/` tetap `exclude` dari workspace stabil sehingga gate di atas tidak
 pernah mengompilasi dependensi nightly/libFuzzer.
 
-Akuntansi hitungan tes: total logis 305 termasuk 7 uji platform-gated
-(`unix`/`not(windows)`) yang tak terkompilasi di Windows, sehingga hitungan
-Windows yang diharapkan adalah 298.
+Akuntansi historis Fase 0: total logis 305 termasuk 7 tes platform-gated (`unix`/`not(windows)`), sehingga baseline Windows saat itu 298. Jumlah tes workspace bergerak mengikuti regresi baru; gunakan angka aktual dari gate terbaru di `docs/autopilot/STATE.md`.
 
 ## 3. Aturan bukti (mengikat)
 
@@ -77,15 +75,15 @@ di Fase 7), tetapi seksi-seksi berikut dinyatakan NON-BERLAKU sebagai otoritas:
   rujukan "pinned CI / CI hijau / trigger run" — non-berlaku sebagai syarat.
 - Ritual yang pensiun: trailer `Deep-Audit`/`Local-Verification`, marker
   `[skip ci]`, promotion `development`→`main`, push freeze, merge-back,
-  workflow dispatch, `check_workflow_security` (kini selalu-skip karena
-  `.github/` tidak ada).
+  workflow dispatch, `check_workflow_security` dengan aturan dan output mengikuti workflow
+  aktual di `.github/workflows/ci.yml`; gate lokal tetap wajib.
 - Disiplin pengganti: tanpa exchange/branch/trailer — tiap batch:
   kerja → gate lokal → audit owner → STATE (+ CHANGELOG hanya bila menyentuh
   perilaku user-facing).
 
 ## 5. Keputusan versi
 
-Versi berjalan `0.4.0` pasca-alpha (SemVer formal + Keep-a-Changelog; rekam alpha `0.1.0`-`0.3.0` tetap beku di catatan rilisnya).
+Versi kandidat berjalan `0.5.0-beta` (SemVer + Keep-a-Changelog; rekam alpha `0.1.0`-`0.3.0` dan beta `0.4.0-beta` tetap beku di catatan rilisnya).
 
 ## 6. Gate mutants (diadopsi owner 2026-10-10)
 

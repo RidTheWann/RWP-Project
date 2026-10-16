@@ -487,7 +487,7 @@ function renderFailure(kind,message) {
   el.failureTitle.textContent=t(titleKey[state.lastErrorKind]||titleKey.unknown);
   el.failureBody.textContent=t(bodyKey[state.lastErrorKind]||bodyKey.unknown);
   el.failureAdvice.textContent=state.lastErrorKind==="permission"?t("permissionRepairHint"):(["component","presentmon_name","version"].includes(state.lastErrorKind)?t("componentRepairHint"):(state.lastErrorKind==="target"?t("gameEmpty"):t("technicalHint")));
-  el.retryAction.textContent=state.lastErrorKind==="permission"?t("failureActionPermission"):(["component","presentmon_name","version"].includes(state.lastErrorKind)?t("failureActionComponent"):(state.lastErrorKind==="target"?t("failureActionTarget"):t("retry")));
+  el.retryAction.textContent = t("retry");
   el.technicalError.textContent=state.lastError || t("noData");
   state.flow="result";setView("result");
 }
@@ -650,7 +650,13 @@ async function finalizeWindowClose() {
   catch(_){state.closeAfterTerminal=false;showToast(t("preflightFailed"));}
 }
 function wireEvents() {
-  el.nav.forEach(function(button){button.addEventListener("click",function(event){event.preventDefault();setView(button.getAttribute("data-view"));});});
+  el.nav.forEach(function(button) {
+    button.addEventListener("click", function(event) {
+      event.preventDefault();
+      if (["countdown", "recording", "analyzing"].includes(state.flow)) return;
+      setView(button.getAttribute("data-view"));
+    });
+  });
   el.processSelect.addEventListener("change",async function(){state.processId=el.processSelect.value;await refreshPreflight();});
   $("refresh-processes").addEventListener("click",refreshProcesses);
   el.start.addEventListener("click",beginCountdown);

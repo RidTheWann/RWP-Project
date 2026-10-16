@@ -1,11 +1,11 @@
-# Unreleased (post-0.4.0-beta)
+# Unreleased / candidate follow-up (0.5.0-beta)
 
-Version `0.4.0` in tree (`0.4.0-beta` released as GitHub pre-release; `0.1.0-alpha`, `0.2.0-alpha`, `0.3.0-alpha` records frozen). User-facing changes accumulate in `CHANGELOG.md` under
+Workspace version targets `0.5.0-beta`. The source candidate and changelog are committed; the GitHub tag/release publication has not been completed in this turn. User-facing changes accumulate in `CHANGELOG.md` under
 `## Unreleased`; this note tracks known issues for the unreleased tree.
 
-## New since 0.4.0-beta
+## Candidate scope
 
-No user-facing changes yet since `0.4.0-beta`.
+The native UX redesign is described in `CHANGELOG.md` under `0.5.0-beta`. The packaged Windows smoke test and manual GUI accessibility acceptance remain unverified.
 
 ## Known issues (unreleased tree)
 
@@ -29,5 +29,4 @@ No user-facing changes yet since `0.4.0-beta`.
   is unverified.
 
 Provenance: local gate on the pinned 1.99.0 toolchain (`docs/local-gates.md`);
-per-batch outputs in `docs/autopilot/STATE.md`. Release history:
-`0.1.0-alpha.md`, `0.2.0-alpha.md`, `0.3.0-alpha.md`, `0.4.0-beta.md`; no version bump for unreleased work.
+per-batch outputs in `docs/autopilot/STATE.md`. Release history: `0.1.0-alpha.md`, `0.2.0-alpha.md`, `0.3.0-alpha.md`, `0.4.0-beta.md`, and candidate notes `0.5.0-beta.md`.
