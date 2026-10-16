@@ -1,8 +1,8 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T21:10:00+07:00
-repo_ref: "main @ 4ccaf02 (0.5.0-beta source/docs candidate; CI run 38912789000 PASS)"
-active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on 4ccaf02; tag/release publication pending; packaged smoke UNVERIFIED)"
+last_updated: 2026-10-16T21:15:00+07:00
+repo_ref: "main @ c6c3588 (0.5.0-beta source candidate; CI run 38913367514 PASS)"
+active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on c6c3588; tag/release publication pending; packaged smoke UNVERIFIED)"
 ---
 
 ## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; Windows gates + debug build PASS on 4ccaf02 (run 38912789000); tag/release publication pending and hardware acceptance remains BLOCKED_ON_USER)
@@ -70,6 +70,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on 4ccaf02;
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
+- 2026-10-16 final verification of candidate source `c6c3588184d40167c9612a04ea0840392dbd349c`: run 38913367514 completed success on Windows gates and Windows debug build. Gate job passed fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow-security, schema/docs, Python tools (18 / OK), and links; `cargo build --locked --workspace` also passed. This confirms the source candidate; it does not prove local gates, NSIS packaging, install/uninstall, installed GUI notifications/close/countdown, visual accessibility execution, or real PresentMon/hardware acceptance.
+
 - 2026-10-16 FINAL CANDIDATE CI on `4ccaf02ec4f7d9620c34abf2766ce0b07e2baea4`: run 38912789000 completed success on Windows. Gates job PASS for Rust 1.99.0 fmt, Clippy, workspace tests (359 passed / 0 failed), cargo-deny, cargo-audit, workflow security, schema, docs, Python unit tools (18 / OK), and links; separate `cargo build --locked --workspace` Windows debug job PASS. This is CI evidence on the candidate tree, not local verification. Latest GitHub release listing has no `v0.5.0-beta` release and matching tag ref is empty. Current GitHub connector exposes no create-tag, create-release, or workflow-dispatch write action; publication is BLOCKED_ON_TOOL (not simulated with a branch). The packaged NSIS workflow, installer hash, install/uninstall and installed GUI smoke remain UNVERIFIED; live PresentMon/hardware acceptance stays BLOCKED_ON_USER.
 
 - 2026-10-16 UX-REDESIGN-0.5.0-BETA verification on product-code HEAD `0ddcecb286dc672b4a883c8bf1c29abd1927c740`: GitHub Actions run 38912007831 completed success. Windows gates PASS: `cargo fmt`; Clippy; `cargo test --workspace --all-features --locked` 359 passed / 0 failed; `cargo deny check`; `cargo audit`; workflow-security check; schema/docs/link gates. Python tool suite: 18 tests / OK. Windows `cargo build --locked --workspace` debug build PASS. The preceding Clippy failure on 410f33f was the new regression test's unqualified `fs::write`; fixed with `std::fs::write` and confirmed by the succeeding run. The current execution environment has no Cargo binary or repository checkout, so no local gate was run; CI results are recorded as CI evidence, not `locally-verified`. NSIS packaging/installer install-uninstall, installed native notifications, manual GUI/countdown/close tests, contrast in the rendered app, and real PresentMon/hardware acceptance remain UNVERIFIED/BLOCKED_ON_USER. GitHub release/tag queries show no `v0.5.0-beta` tag or release; publication is still pending.
@@ -116,7 +118,7 @@ active_wp: "UX-REDESIGN-0.5.0-beta (Windows gates + debug build PASS on 4ccaf02;
 
 ## NEXT
 
-Release blocker: publish the already-green candidate by creating and pushing annotated tag `v0.5.0-beta` at `4ccaf02ec4f7d9620c34abf2766ce0b07e2baea4` from the existing local `main` checkout; then watch the tag-triggered release workflow and verify NSIS installer + SHA256SUMS. The current GitHub connector has no tag/release-write action, so do not create a branch to fake a tag. After publication, verify install/uninstall and packaged GUI smoke; real PresentMon/hardware acceptance and local pinned-toolchain gates remain unverified here.
+Release blocker: publish the already-green candidate by creating and pushing annotated tag `v0.5.0-beta` at `c6c3588184d40167c9612a04ea0840392dbd349c` from the existing local `main` checkout; then watch the tag-triggered release workflow and verify NSIS installer + SHA256SUMS. The current GitHub connector has no tag/release-write action, so do not create a branch to fake a tag. After publication, verify install/uninstall and packaged GUI smoke; real PresentMon/hardware acceptance and local pinned-toolchain gates remain unverified here.
 ## Keputusan terbuka
 
 - PresentMon graceful stop — default: process-group console control with immediate kill fallback when delivery fails; bounded wait only after successful request.
