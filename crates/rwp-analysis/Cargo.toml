@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-rwp-core = { version = "0.5.0", path = "../rwp-core" }
+rwp-core = { version = "0.5.0-beta", path = "../rwp-core" }
 serde.workspace = true
 thiserror.workspace = true
 
