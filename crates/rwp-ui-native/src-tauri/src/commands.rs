@@ -16,7 +16,7 @@ use rwp_report::{PerformanceReport, from_json};
 use rwp_session::{SessionConfig, SessionResult, SessionRunner};
 use rwp_ui::DashboardModel;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 const MAX_SESSION_ID_LENGTH: usize = 96;
@@ -51,6 +51,59 @@ pub struct SessionStartRequest {
     /// by default; the in-app banner always renders regardless of this flag.
     #[serde(default)]
     pub disable_stable_notification: bool,
+    /// Language used by native notifications; unknown values fall back to English.
+    #[serde(default = "default_notification_language")]
+    pub notification_language: String,
+}
+
+fn default_notification_language() -> String {
+    String::from("en")
+}
+
+/// Inputs for starting a session with an application-managed output path.
+#[derive(Debug, Deserialize)]
+pub struct ManagedSessionStartRequest {
+    /// Absolute path to the user-supplied PresentMon executable.
+    pub presentmon_executable: String,
+    /// Target process identifier.
+    pub process_id: u32,
+    /// Maximum capture duration in seconds.
+    pub duration_seconds: u64,
+    /// Windows telemetry sampling interval in milliseconds.
+    #[serde(default)]
+    pub sample_interval_ms: Option<u64>,
+    /// Exclude dropped presents from the capture.
+    #[serde(default)]
+    pub exclude_dropped: bool,
+    /// Explicitly allow stopping an existing PresentMon trace session.
+    #[serde(default)]
+    pub stop_existing_session: bool,
+    /// Disable RWP's additional process/thread telemetry probing.
+    #[serde(default)]
+    pub no_process_probing: bool,
+    /// Disable the post-completion Stable notification.
+    #[serde(default)]
+    pub disable_stable_notification: bool,
+    /// Native notification locale ("id" or "en").
+    #[serde(default = "default_notification_language")]
+    pub notification_language: String,
+}
+
+/// Permission/component/process readiness used by the Home preflight.
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionPreflight {
+    /// Whether Windows permits PresentMon real-time capture.
+    pub permission_ready: bool,
+    /// Whether the configured PresentMon path currently points to an executable file.
+    pub component_ready: bool,
+    /// Whether the selected process identifier exists in the current process snapshot.
+    pub process_ready: bool,
+}
+
+/// Prevents unconfirmed native window-close requests during active measurement.
+#[derive(Default)]
+pub struct WindowCloseGuard {
+    pub(crate) allow_close: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,6 +124,8 @@ pub enum SessionSnapshot {
     Completed {
         /// Target process identifier.
         process_id: u32,
+        /// Whether the capture stopped before its natural duration completed.
+        interrupted: bool,
         /// Active-display refresh rate captured at session start, when available.
         display_refresh_rate_hz: Option<f64>,
         /// Display-device name used for the refresh-rate observation, when available.
@@ -157,25 +212,28 @@ fn emit_session_event<R: Runtime>(app: Option<&AppHandle<R>>, event: &SessionEve
     }
 }
 
-/// Shows the instant-stability toast for a completed session carrying a
-/// Stable verdict, best effort.
-///
-/// The payload comes from [`rwp_ui::stable_notification_content`] (counts
-/// plus static literals only, never identities). When the runtime refuses —
-/// no notification server, headless host — the call fails silently by
-/// design: the in-app banner renders the same persisted stability.v1
-/// diagnostic and remains the source of truth.
-fn notify_stable_session<R: Runtime>(app: &Option<&AppHandle<R>>, result: &SessionResult) {
+/// Returns generic native notification copy; never includes process identity.
+fn completion_notification_content(language: &str) -> (&'static str, &'static str) {
+    if language.eq_ignore_ascii_case("id") {
+        ("Pengukuran selesai", "Hasil Anda siap dilihat.")
+    } else {
+        ("Measurement complete", "Your results are ready to view.")
+    }
+}
+
+/// Best-effort native delivery; Windows host policy may suppress notifications.
+fn show_native_notification<R: Runtime>(
+    app: &Option<&AppHandle<R>>,
+    title: &str,
+    body: &str,
+) {
     use tauri_plugin_notification::NotificationExt;
-    let Some((title, body)) = rwp_ui::stable_notification_content(&result.diagnostics) else {
-        return;
-    };
     let Some(app) = app else { return };
     let _notified = app
         .notification()
         .builder()
-        .title(title)
-        .body(body)
+        .title(title.to_owned())
+        .body(body.to_owned())
         .show()
         .is_ok();
 }
@@ -427,6 +485,7 @@ pub fn session_history_load(session_id: String) -> Result<SessionSnapshot, Strin
     let dashboard = rwp_ui::build_dashboard_model(&report, &diagnostics, None);
     Ok(SessionSnapshot::Completed {
         process_id: manifest.process_id,
+        interrupted: manifest.interrupted,
         display_refresh_rate_hz: manifest.display_refresh_rate_hz,
         display_refresh_device: None,
         display_refresh_warning: None,
@@ -477,8 +536,10 @@ impl SessionManager {
 
     fn finish(&self, result: SessionResult) -> Result<(), String> {
         let mut state = self.lock()?;
+        let interrupted = result.stop_outcome.is_some();
         state.snapshot = SessionSnapshot::Completed {
             process_id: result.process_id,
+            interrupted,
             display_refresh_rate_hz: result.display_refresh_rate.as_ref().map(|value| value.hz),
             display_refresh_device: result
                 .display_refresh_rate
@@ -518,6 +579,7 @@ fn run_session_worker<F, R>(
     app: Option<&AppHandle<R>>,
     operation: F,
     notify_on_stable: bool,
+    notification_language: &str,
 ) where
     F: FnOnce() -> Result<SessionResult, rwp_session::SessionError>,
     R: Runtime,
@@ -528,11 +590,21 @@ fn run_session_worker<F, R>(
                 process_id: result.process_id,
                 frame_count: result.report.frame_count,
             };
-            if notify_on_stable {
-                notify_stable_session(&app, &result);
-            }
+            let stable_notification = if notify_on_stable {
+                rwp_ui::stable_notification_content_for_language(
+                    &result.diagnostics,
+                    notification_language,
+                )
+            } else {
+                None
+            };
             if manager.finish(result).is_ok() {
                 emit_session_event(app, &event);
+                let (title, body) = completion_notification_content(notification_language);
+                show_native_notification(&app, title, body);
+                if let Some((title, body)) = stable_notification {
+                    show_native_notification(&app, &title, &body);
+                }
                 tracing::info!(target: "rwp", event = "session_completed");
             }
         }
@@ -668,6 +740,118 @@ pub fn session_pick_output_file(app: AppHandle) -> Result<Option<String>, String
     ))
 }
 
+/// Starts a capture while RWP manages the temporary CSV/output location.
+#[tauri::command]
+pub fn session_start_managed(
+    app: AppHandle,
+    request: ManagedSessionStartRequest,
+    manager: State<'_, SessionManager>,
+) -> Result<SessionSnapshot, String> {
+    let root = history_root()?;
+    let pending_root = root.join(".capture");
+    fs::create_dir_all(&pending_root).map_err(|error| {
+        format!("managed capture output directory could not be prepared: {error}")
+    })?;
+    let base = format!("session-{}", now_unix_ms());
+    let session_id = unique_session_id(&root, &base);
+    let output_file = pending_root.join(format!("{session_id}.csv"));
+    start_session_inner(
+        app,
+        SessionStartRequest {
+            presentmon_executable: request.presentmon_executable,
+            output_file: output_file.to_string_lossy().into_owned(),
+            process_id: request.process_id,
+            duration_seconds: request.duration_seconds,
+            sample_interval_ms: request.sample_interval_ms,
+            exclude_dropped: request.exclude_dropped,
+            stop_existing_session: request.stop_existing_session,
+            no_process_probing: request.no_process_probing,
+            disable_stable_notification: request.disable_stable_notification,
+            notification_language: request.notification_language,
+        },
+        manager,
+        true,
+    )
+}
+
+/// Performs best-effort preflight without exposing executable paths to the UI.
+#[tauri::command]
+pub fn session_preflight(
+    presentmon_executable: Option<String>,
+    process_id: Option<u32>,
+) -> SessionPreflight {
+    let permission_ready = capture_permission_ready();
+    let component_ready = presentmon_executable.as_deref().is_some_and(|value| {
+        let path = Path::new(value);
+        path.is_absolute()
+            && path.file_name().is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("PresentMon.exe"))
+            && path.metadata().is_ok_and(|metadata| metadata.is_file())
+            && path.canonicalize().is_ok()
+    });
+    let process_ready = process_id.is_some_and(|target| {
+        target > 0
+            && rwp_system::list_processes()
+                .is_ok_and(|entries| entries.iter().any(|entry| entry.process_id == target))
+    });
+    SessionPreflight { permission_ready, component_ready, process_ready }
+}
+
+#[cfg(windows)]
+fn capture_permission_ready() -> bool {
+    rwp_system::preflight_presentmon_permissions().is_ok()
+}
+
+#[cfg(not(windows))]
+fn capture_permission_ready() -> bool {
+    false
+}
+
+/// Returns a stable UI error kind for the existing set of known English errors.
+#[tauri::command]
+pub fn session_error_kind(message: String) -> String {
+    error_kind_for_message(&message).to_owned()
+}
+
+fn error_kind_for_message(message: &str) -> &'static str {
+    let marker = [
+        ("Performance Log Users", "permission"),
+        ("permission", "permission"),
+        ("between 10 ms and 5 s", "interval"),
+        ("duration", "duration"),
+        ("greater than zero", "target"),
+        ("already running", "session_active"),
+        ("worker", "worker"),
+        ("unsupported PresentMon version", "version"),
+        ("PresentMon.exe", "presentmon_name"),
+    ];
+    marker.iter()
+        .find_map(|(needle, kind)| message.contains(needle).then_some(*kind))
+        .unwrap_or("unknown")
+}
+
+/// Allows the main window to close only after capture has reached a terminal state.
+#[tauri::command]
+pub fn session_close_confirmed(
+    app: AppHandle,
+    manager: State<'_, SessionManager>,
+    close_guard: State<'_, WindowCloseGuard>,
+) -> Result<(), String> {
+    {
+        let state = manager.lock()?;
+        if matches!(state.snapshot, SessionSnapshot::Running { .. }) {
+            return Err("capture session is still running".to_owned());
+        }
+    }
+    close_guard.allow_close.store(true, Ordering::Release);
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window is unavailable".to_owned())?;
+    if let Err(error) = window.close() {
+        close_guard.allow_close.store(false, Ordering::Release);
+        return Err(error.to_string());
+    }
+    Ok(())
+}
+
 /// Maps a session failure message to actionable remediation guidance.
 ///
 /// Pure substring rules over backend error text so the GUI and future callers
@@ -729,6 +913,15 @@ pub fn session_start(
     request: SessionStartRequest,
     manager: State<'_, SessionManager>,
 ) -> Result<SessionSnapshot, String> {
+    start_session_inner(app, request, manager, false)
+}
+
+fn start_session_inner(
+    app: AppHandle,
+    request: SessionStartRequest,
+    manager: State<'_, SessionManager>,
+    cleanup_output_on_finish: bool,
+) -> Result<SessionSnapshot, String> {
     let mut state = manager.lock()?;
     if matches!(state.snapshot, SessionSnapshot::Running { .. }) {
         return Err("a capture session is already running".to_owned());
@@ -771,6 +964,7 @@ pub fn session_start(
 
     let state_handle = manager.inner().state.clone();
     let event_app = app.clone();
+    let cleanup_output = cleanup_output_on_finish.then(|| config.output_file.clone());
     match std::thread::Builder::new()
         .name("rwp-session-worker".to_owned())
         .spawn(move || {
@@ -783,9 +977,18 @@ pub fn session_start(
                 Some(&event_app),
                 || {
                     let runner = SessionRunner;
-                    runner.run(&config, &cancellation)
+                    let result = runner.run(&config, &cancellation);
+                    if let Some(path) = cleanup_output {
+                        if let Err(error) = fs::remove_file(&path) {
+                            if error.kind() != std::io::ErrorKind::NotFound {
+                                tracing::warn!(target: "rwp", event = "managed_output_cleanup_failed");
+                            }
+                        }
+                    }
+                    result
                 },
                 !request.disable_stable_notification,
+                &request.notification_language,
             );
         }) {
         Ok(_worker) => {
@@ -834,6 +1037,34 @@ pub fn session_reset(manager: State<'_, SessionManager>) -> Result<SessionSnapsh
 #[cfg(test)]
 mod audit_regressions {
     use super::{SessionManager, SessionSnapshot, fail_session_worker_spawn, run_session_worker};
+
+    #[test]
+    fn default_notification_language_is_backward_compatible() -> Result<(), Box<dyn std::error::Error>> {
+        let request: super::SessionStartRequest = serde_json::from_str(
+            r#"{"presentmon_executable":"PresentMon.exe","output_file":"capture.csv","process_id":42,"duration_seconds":10}"#,
+        )?;
+        assert_eq!(request.notification_language, "en");
+        Ok(())
+    }
+
+    #[test]
+    fn completion_notification_is_static_and_localized() {
+        assert_eq!(
+            super::completion_notification_content("id"),
+            ("Pengukuran selesai", "Hasil Anda siap dilihat.")
+        );
+        assert_eq!(
+            super::completion_notification_content("en"),
+            ("Measurement complete", "Your results are ready to view.")
+        );
+    }
+
+    #[test]
+    fn error_kinds_cover_known_cases_and_unknown_fallback() {
+        assert_eq!(super::error_kind_for_message("invalid PresentMon.exe path"), "presentmon_name");
+        assert_eq!(super::error_kind_for_message("permission denied"), "permission");
+        assert_eq!(super::error_kind_for_message("an unrecognized failure"), "unknown");
+    }
 
     #[test]
     fn session_start_defaults_process_probing_on_for_compatibility()
@@ -1237,6 +1468,7 @@ mod audit_regressions {
                 panic!("synthetic worker panic");
             },
             false,
+            "en",
         );
         assert!(matches!(
             manager.snapshot().ok(),

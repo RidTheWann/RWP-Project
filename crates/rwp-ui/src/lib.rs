@@ -335,6 +335,24 @@ pub fn stable_notification_content(diagnostics: &[Diagnostic]) -> Option<(String
     Some((banner.headline, banner.detail))
 }
 
+/// Returns an ID/EN Stable toast without exposing process identities.
+pub fn stable_notification_content_for_language(
+    diagnostics: &[Diagnostic],
+    language: &str,
+) -> Option<(String, String)> {
+    let stable = diagnostics.iter().find(|diagnostic| {
+        diagnostic.rule_id == "stability.v1" && diagnostic.category == DiagnosticCategory::Stable
+    })?;
+    if language.eq_ignore_ascii_case("id") {
+        Some((
+            String::from("Hasil pengukuran stabil"),
+            format!("{} observasi; tidak ada peristiwa stutter; perubahan dalam batas.", stable.sample_count),
+        ))
+    } else {
+        stable_notification_content(diagnostics)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DashboardTab, UiState, build_dashboard_model};
@@ -527,6 +545,28 @@ mod tests {
         assert_eq!(body, banner.detail);
         assert!(!title.contains("evil"));
         assert!(!body.contains("evil"));
+        Ok(())
+    }
+
+    #[test]
+    fn localized_stable_notification_never_includes_identity() -> Result<(), Box<dyn std::error::Error>> {
+        let diagnostic = rwp_core::Diagnostic::new(
+            rwp_core::DiagnosticCategory::Stable,
+            String::from("stability.v1"),
+            100,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            64,
+            60,
+        )?;
+        let (title, body) =
+            super::stable_notification_content_for_language(&[diagnostic], "id")
+                .ok_or("Stable verdict must produce localized copy")?;
+        assert_eq!(title, "Hasil pengukuran stabil");
+        assert!(body.starts_with("64 observasi;"));
+        assert!(!body.contains("PID"));
+        assert!(!body.contains(".exe"));
         Ok(())
     }
 
