@@ -1,11 +1,11 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T18:59:04+07:00
-repo_ref: "main @ de8d0ff (UX handoff docs updated; implementation baseline 1216ac9; no code changed)"
+last_updated: 2026-10-16T18:59:56+07:00
+repo_ref: "main @ 1216ac9 product-code baseline; current UX handoff 4f2608f; documentation-only changes"
 active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not started)"
 ---
 
-## Status WP (post-alpha tree 0.3.0; alpha 0.1.0/0.2.0 records frozen; v1.0 hardware acceptance stays BLOCKED_ON_USER; alpha local gate 2026-10-11 green: fmt/clippy/test 298/deny/audit/schemas/docs/unit-10/links-70)
+## Status WP (product code baseline 0.4.0-beta @ 1216ac9; older WP rows/gate outputs remain historical evidence; current UX handoff docs-only, implementation NOT STARTED; v1.0 hardware acceptance remains BLOCKED_ON_USER)
 
 | WP | status (DONE/IN_PROGRESS/BLOCKED_ON_USER/UNVERIFIED) | catatan |
 |---|---|---|
@@ -70,7 +70,7 @@ active_wp: "UX-REDESIGN-HANDOFF (design complete; Muse implementation not starte
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
 
-- 2026-10-16 UX-REDESIGN-HANDOFF DONE (design-only): added docs/autopilot/UX_REDESIGN_HANDOFF.md with source audit, ID/EN copy deck, IA/wireframes, best-default decisions, five Muse batches, acceptance checklist, and official accessibility/Tauri references. Handoff revision: de8d0ffbf532561d470943336ef3f0b13914dbf6. Source baseline: 1216ac9eea70e7cb011faa1aa21d161cf7e1e8c8. No Rust or web UI code, analysis rules, thresholds, or persisted schemas changed. No build, tests, local gates, accessibility run, or packaged Windows smoke test performed. Implementation remains TODO/UNVERIFIED.
+- 2026-10-16 UX-REDESIGN-HANDOFF DONE (design-only): added docs/autopilot/UX_REDESIGN_HANDOFF.md with source audit, ID/EN copy deck, IA/wireframes, best-default decisions, five Muse batches, acceptance checklist, and official accessibility/Tauri references. Handoff revision: 4f2608fbc56531fd8526a7e3cbabaaee909c8187. Source baseline: 1216ac9eea70e7cb011faa1aa21d161cf7e1e8c8. No Rust or web UI code, analysis rules, thresholds, or persisted schemas changed. No build, tests, local gates, accessibility run, or packaged Windows smoke test performed. Implementation remains TODO/UNVERIFIED.
 
 
 - 2026-10-16 RELEASE-0.4.0-PREP DONE (owner "lakukan perilisan v0.4.0 beta"; uncommitted until commit below). Critical fix first: release workflow trigger widened v*-alpha* -> + v*-beta* (a beta tag would never have fired the old workflow); comments + SHA256SUMS example generalized. Bump 0.3.0->0.4.0: root + 30 path-dep reqs + tauri.conf (32 strings; one PowerShell -replace detour wrote BOMs + backslash-escapes into all 11 files — caught by verification, stripped/repaired via script file, diff re-proven pure version lines + TOML parse; lesson recorded: file edits via Edit tool only). Fixtures doctor/main/persistence (5); lock regen ONLY rwp lines; CHANGELOG cut to ## [0.4.0-beta] + fresh Unreleased. Docs: new 0.4.0-beta.md, README beta scope, release README 4th entry, unreleased post-0.4.0 reset, ledger/local-gates/MASTER_PLAN snapshots. Binary verified rwp 0.4.0. Full gate (pinned 1.99.0, --locked): fmt 0; clippy 0; test 353/0; deny 0; audit 0 (2 allowed); schemas/docs/unit 13/links 82/wfsec PASS. Next: commit, push, tag v0.4.0-beta (ordered).
