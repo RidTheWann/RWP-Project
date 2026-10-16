@@ -1,9 +1,9 @@
 # Project Ledger (milestone history; authoritative live status is docs/autopilot/STATE.md)
 
-## Snapshot (0.3.0 post-alpha; for live WP/AUD/RC status see docs/autopilot/STATE.md)
+## Snapshot (0.4.0 post-alpha; for live WP/AUD/RC status see docs/autopilot/STATE.md)
 
 - Milestone history ends at M10 below; current state (Fase 0-7 done, post-alpha console-stop work in, hardware/sign-off blocked) lives in docs/autopilot/STATE.md.
-- Workspace version: 0.3.0 (post-alpha; alpha 0.1.0/0.2.0 records frozen per docs/local-gates.md §5)
+- Workspace version: 0.4.0 (post-alpha; alpha 0.1.0-0.3.0 records frozen per docs/local-gates.md §5)
 - MSRV: Rust 1.99.0 (aligned with the pinned test toolchain; every gate runs on 1.99.0)
 - Development toolchain: Rust 1.99.0 (pinned; every gate uses --locked)
 - Primary target: x86_64-pc-windows-msvc
@@ -43,6 +43,7 @@
 - ADR-0031 `rwp capture` CLI on the shared session orchestrator: accepted
 - ADR-0032 graceful PresentMon stop without a caller console: accepted
 - ADR-0035 unknown PresentMon version (amends ADR-0016): accepted
+- ADR-0036 drop isolated out-of-order QPC rows (refines AUD-07): accepted
 
 ## M1 completion
 

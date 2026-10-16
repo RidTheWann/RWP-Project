@@ -11,7 +11,7 @@ pub use persistence::{
 mod windows;
 
 #[cfg(windows)]
-pub use windows::{SessionConfig, SessionError, SessionResult, SessionRunner};
+pub use windows::{SessionConfig, SessionError, SessionResult, SessionRunner, TelemetryWarning};
 
 /// Deterministic timestamp-range coverage summary for one session.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

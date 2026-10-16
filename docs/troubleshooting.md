@@ -13,6 +13,7 @@ Every CLI failure prints a stable `RWP-Exxxx` code plus a `Fix:` line; with
 | PresentMon path, PID, or options rejected | RWP-E2000 (20) | Executable must exist, be a regular file named `PresentMon.exe`; PID > 0; duration 1–3600 s; interval 10–5000 ms. |
 | Capture dies at runtime (permissions, lifecycle, stderr) | RWP-E2100 (21) | Run elevated or join Performance Log Users; check the executable and stderr. |
 | CSV rejected (schema, timestamps, PID, limits) | RWP-E2200 (22) | Validate PresentMon v2 columns, monotonic QPC, target PID, and the 512 MiB / 10 M-row bounds. |
+| Capture notes dropped out-of-order rows | notice, exit 0 | Isolated backwards-QPC rows are skipped and counted (session warning + manifest count); the capture itself stays valid. |
 | Report/capture schema rejected | RWP-E3000 (30) | Use a compatible RWP version; legacy files go through `rwp migrate`. |
 | Diagnosis needs more observations | RWP-E4000 (40) | Provide enough frames/telemetry; review thresholds in `docs/diagnostics.md`. |
 | Manifest/hash/session integrity | RWP-E5000 (50) | Re-import or re-analyze; check file limits and filesystem permissions. |

@@ -10,8 +10,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-rwp-core = { version = "0.3.0", path = "../rwp-core" }
-rwp-system = { version = "0.3.0", path = "../rwp-system" }
+rwp-core = { version = "0.4.0", path = "../rwp-core" }
+rwp-system = { version = "0.4.0", path = "../rwp-system" }
 thiserror.workspace = true
 tracing.workspace = true
 

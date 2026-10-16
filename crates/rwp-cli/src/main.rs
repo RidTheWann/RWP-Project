@@ -430,6 +430,9 @@ fn run_capture(
     if let Some(hint) = etw_kill_hint_for_outcome(result.stop_outcome) {
         eprintln!("{hint}");
     }
+    if let Some(notice) = dropped_rows_notice(&result.telemetry_warnings) {
+        eprintln!("{notice}");
+    }
     Ok(())
 }
 
@@ -466,6 +469,18 @@ fn capture_completion_notice(interrupted: bool, session_dir: &std::path::Path) -
             session_dir.display()
         )
     })
+}
+
+/// Renders the dropped-rows notice for captures that skipped isolated
+/// out-of-order QPC rows, if any. Reads the stable parser wording from the
+/// session warnings so CLI, session, and GUI surfaces stay aligned.
+/// Windows-only like the live-capture path that produces these warnings.
+#[cfg(windows)]
+fn dropped_rows_notice(warnings: &[rwp_session::TelemetryWarning]) -> Option<String> {
+    warnings
+        .iter()
+        .find(|warning| warning.message.contains("backwards QPC"))
+        .map(|warning| format!("note: {}", warning.message))
 }
 
 /// Renders the ETW-hygiene hint for a killed stop, if any.
@@ -548,6 +563,9 @@ fn import_presentmon(
         &PresentMonTarget::ProcessId(process_id),
         ParseMode::Strict,
     )?;
+    if let Some(notice) = rwp_capture::dropped_rows_notice(capture.dropped_nonmonotonic_rows) {
+        eprintln!("note: {notice}");
+    };
     let document = CaptureDocument {
         schema_version: String::from("rwp.capture.v1"),
         frames: capture.frames.clone(),
@@ -1325,7 +1343,7 @@ mod tests {
             intersection_seconds: None,
         };
         let provenance = rwp_session::SessionProvenance {
-            rwp_version: String::from("0.3.0"),
+            rwp_version: String::from("0.4.0"),
             git_sha: None,
             build_target: None,
             build_profile: None,
@@ -1515,7 +1533,7 @@ mod tests {
         )?;
         let manifest = rwp_session::SessionManifest {
             provenance: rwp_session::SessionProvenance {
-                rwp_version: String::from("0.3.0"),
+                rwp_version: String::from("0.4.0"),
                 git_sha: None,
                 build_target: None,
                 build_profile: None,
@@ -1780,6 +1798,25 @@ mod tests {
             None
         );
         assert_eq!(super::etw_kill_hint_for_outcome(None), None);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dropped_rows_notice_reports_parser_warning() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(super::dropped_rows_notice(&[]), None);
+        let unrelated = vec![rwp_session::TelemetryWarning {
+            message: String::from("GlobalMemoryStatusEx failed"),
+        }];
+        assert_eq!(super::dropped_rows_notice(&unrelated), None);
+        let warnings = vec![rwp_session::TelemetryWarning {
+            message: String::from(
+                "dropped 2 rows with backwards QPC timestamps; source CSV retained, counts recorded here",
+            ),
+        }];
+        let notice = super::dropped_rows_notice(&warnings).ok_or("dropped rows must warn")?;
+        assert!(notice.starts_with("note: "));
+        assert!(notice.contains('2'));
         Ok(())
     }
 

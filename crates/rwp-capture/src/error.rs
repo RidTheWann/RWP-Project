@@ -148,16 +148,6 @@ pub enum PresentMonCsvError {
         /// Parsing or validation explanation.
         reason: String,
     },
-    /// A QPC timestamp moved backwards.
-    #[error("PresentMon QPC timestamp moved backwards at row {row}: {previous} -> {current}")]
-    NonMonotonicQpc {
-        /// One-based CSV data row number, excluding the header.
-        row: usize,
-        /// Previous QPC value.
-        previous: u64,
-        /// Current QPC value.
-        current: u64,
-    },
     /// A PresentMon QPC timestamp predates the shared session origin.
     #[error(
         "PresentMon QPC timestamp is before the shared origin at row {row}: origin {origin}, current {current}"

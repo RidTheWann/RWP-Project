@@ -19,7 +19,7 @@ This document covers the trust boundaries and untrusted inputs used by RWP v1.0 
 
 ### CSV
 
-PresentMon CSV is treated as hostile input. The parser rejects malformed structure, missing required columns, invalid metrics, backwards QPC timestamps, process identity changes, and timestamp conversion overflow. Property tests must preserve the no-panic invariant.
+PresentMon CSV is treated as hostile input. The parser rejects malformed structure, missing required columns, invalid metrics, process identity changes, and timestamp conversion overflow; isolated backwards-QPC rows are dropped and counted with a warning instead of failing the session. Property tests must preserve the no-panic invariant.
 
 ### Persisted JSON
 

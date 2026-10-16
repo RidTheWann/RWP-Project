@@ -24,8 +24,24 @@ pub struct PresentMonCapture {
     pub dominant_swap_chain_address: Option<u64>,
     /// Number of source rows discarded because they were outside the dominant swap chain.
     pub discarded_frame_count: usize,
+    /// Number of source rows dropped because their QPC timestamp moved
+    /// backwards. Real PresentMon output occasionally emits isolated rows out
+    /// of order (multi-threaded emission); dropping the row keeps the
+    /// timestamp chain monotonic while the count preserves provenance.
+    pub dropped_nonmonotonic_rows: usize,
     /// Frame-type distribution retained from the dominant swap chain.
     pub frame_type_counts: Vec<(String, usize)>,
+}
+
+/// Builds the dropped-rows warning message for a parsed capture, so live
+/// sessions, CLI import, and GUI surfaces share one stable wording.
+/// Returns `None` when nothing was dropped. Pure across platforms.
+pub fn dropped_rows_notice(dropped_nonmonotonic_rows: usize) -> Option<String> {
+    (dropped_nonmonotonic_rows > 0).then(|| {
+        format!(
+            "dropped {dropped_nonmonotonic_rows} rows with backwards QPC timestamps; source CSV retained, counts recorded here"
+        )
+    })
 }
 
 /// Parsing strictness for PresentMon CSV input.
@@ -158,6 +174,7 @@ impl PresentMonCsvParser {
         let mut parsed_frames = Vec::new();
         let mut first_qpc = None;
         let mut previous_qpc = None;
+        let mut dropped_nonmonotonic_rows = 0_usize;
         let mut process_id = None;
         let mut application = None;
         let mut row = 1_usize;
@@ -262,11 +279,13 @@ impl PresentMonCsvParser {
             if let Some(previous) = previous_qpc
                 && qpc < previous
             {
-                return Err(PresentMonCsvError::NonMonotonicQpc {
-                    row,
-                    previous,
-                    current: qpc,
-                });
+                // Isolated out-of-order rows occur in real PresentMon output
+                // (multi-threaded emission); drop the row and count it instead
+                // of failing the whole capture. The monotonic chain keeps the
+                // previous high-water mark so later rows still validate.
+                dropped_nonmonotonic_rows = dropped_nonmonotonic_rows.saturating_add(1);
+                row = row.saturating_add(1);
+                continue;
             }
             previous_qpc = Some(qpc);
             let base = match self.qpc_origin {
@@ -372,6 +391,7 @@ impl PresentMonCsvParser {
             application,
             dominant_swap_chain_address,
             discarded_frame_count,
+            dropped_nonmonotonic_rows,
             frame_type_counts: frame_type_counts.into_iter().collect(),
         })
     }
@@ -907,16 +927,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_backwards_qpc() -> Result<(), Box<dyn std::error::Error>> {
+    fn drops_backwards_qpc_row_and_counts_it() -> Result<(), Box<dyn std::error::Error>> {
+        // Real PresentMon 2.6.0 output observed in the field moves QPC
+        // backwards on isolated rows (multi-threaded emission order); the
+        // row is dropped and counted instead of failing the session.
         let csv = format!(
-            "{HEADER}\nGame.exe,42,1000,8.0,5.0,1.0,7.0,6.0,1.0,9.0\nGame.exe,42,900,8.0,5.0,1.0,7.0,6.0,1.0,9.0\n"
+            "{HEADER}\nGame.exe,42,1000,8.0,5.0,1.0,7.0,6.0,1.0,9.0\nGame.exe,42,900,8.0,5.0,1.0,7.0,6.0,1.0,9.0\nGame.exe,42,1100,8.0,5.0,1.0,7.0,6.0,1.0,9.0\n"
         );
         let parser = PresentMonCsvParser::new(1_000_000)?;
-        assert!(
-            parser
-                .parse_reader(csv.as_bytes(), &PresentMonTarget::ProcessId(42))
-                .is_err()
-        );
+        let capture = parser.parse_reader(csv.as_bytes(), &PresentMonTarget::ProcessId(42))?;
+        assert_eq!(capture.frames.len(), 2);
+        assert_eq!(capture.dropped_nonmonotonic_rows, 1);
+        assert_eq!(capture.discarded_frame_count, 0);
         Ok(())
     }
 

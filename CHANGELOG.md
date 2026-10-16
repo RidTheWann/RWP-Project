@@ -10,7 +10,12 @@ Entry format: one bullet per user-facing change under
 
 ## Unreleased
 
-No user-facing changes yet since `0.3.0-alpha`.
+No user-facing changes yet since `0.4.0-beta`.
+
+## [0.4.0-beta] - 2026-10-16
+
+### Fixed
+- Survive isolated out-of-order QPC rows in real PresentMon output instead of failing the capture: backwards rows are dropped and counted (session warning + manifest count + stderr notice) while the timestamp chain keeps its high-water mark; session-wrapped CSV/config/lifecycle failures also keep their true RWP-E2200/E2000/E2100 codes instead of collapsing to RWP-E5100.
 
 ## [0.3.0-alpha] - 2026-10-16
 

@@ -48,11 +48,38 @@ pub fn classify(error: &Error) -> ErrorReport {
             error.downcast_ref::<PresentMonCaptureError>(),
             Some(PresentMonCaptureError::Csv(_))
         )
+        || matches!(
+            error.downcast_ref::<rwp_session::SessionError>(),
+            Some(
+                rwp_session::SessionError::CaptureCsv(_)
+                    | rwp_session::SessionError::Capture(PresentMonCaptureError::Csv(_)),
+            )
+        )
     {
         ErrorDescriptor {
             code: "RWP-E2200",
             exit_code: 22,
             remediation: "Validate the PresentMon CSV version, required columns, timestamps, target PID, and resource limits.",
+        }
+    } else if let Some(session) = error.downcast_ref::<rwp_session::SessionError>() {
+        // Session-wrapped failures keep the inner boundary code: config and
+        // lifecycle errors must not surface as the generic session code.
+        match session {
+            rwp_session::SessionError::CaptureConfig(_) => ErrorDescriptor {
+                code: "RWP-E2000",
+                exit_code: 20,
+                remediation: "Check the PresentMon path, target process ID, output path, and capture options.",
+            },
+            rwp_session::SessionError::Capture(_) => ErrorDescriptor {
+                code: "RWP-E2100",
+                exit_code: 21,
+                remediation: "Verify PresentMon permissions, executable validity, lifecycle state, and stderr output.",
+            },
+            _ => ErrorDescriptor {
+                code: "RWP-E5100",
+                exit_code: 51,
+                remediation: "Run the command on a supported platform and check the live-session configuration.",
+            },
         }
     } else if error.downcast_ref::<PresentMonCaptureError>().is_some() {
         ErrorDescriptor {
@@ -161,6 +188,47 @@ mod tests {
         let report = classify(&error);
         assert_eq!(report.descriptor.code, "RWP-E2200");
         assert_eq!(report.descriptor.exit_code, 22);
+    }
+
+    #[test]
+    fn session_csv_errors_keep_csv_code() {
+        let error = anyhow::Error::new(rwp_session::SessionError::CaptureCsv(
+            rwp_capture::PresentMonCsvError::EmptyCapture,
+        ));
+        let report = classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E2200");
+        assert_eq!(report.descriptor.exit_code, 22);
+    }
+
+    #[test]
+    fn session_lifecycle_errors_keep_lifecycle_code() {
+        let error = anyhow::Error::new(rwp_session::SessionError::Capture(
+            rwp_capture::PresentMonCaptureError::OutputAlreadyExists(std::path::PathBuf::from(
+                "run.csv",
+            )),
+        ));
+        let report = classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E2100");
+        assert_eq!(report.descriptor.exit_code, 21);
+    }
+
+    #[test]
+    fn session_config_errors_keep_config_code() {
+        let error = anyhow::Error::new(rwp_session::SessionError::CaptureConfig(
+            rwp_capture::PresentMonConfigError::ZeroProcessId,
+        ));
+        let report = classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E2000");
+        assert_eq!(report.descriptor.exit_code, 20);
+    }
+
+    #[test]
+    fn other_session_errors_keep_session_code() {
+        let error =
+            anyhow::Error::new(rwp_session::SessionError::InvalidConfiguration("synthetic"));
+        let report = classify(&error);
+        assert_eq!(report.descriptor.code, "RWP-E5100");
+        assert_eq!(report.descriptor.exit_code, 51);
     }
 
     #[test]

@@ -292,6 +292,14 @@ fn presentmon_version_warning(executable: &std::path::Path) -> Option<TelemetryW
     }
 }
 
+/// Builds the dropped-rows session warning for a parsed capture, sharing
+/// the stable parser wording so CLI, session, and GUI surfaces stay aligned.
+/// Returns `None` when nothing was dropped.
+fn dropped_rows_warning(dropped_nonmonotonic_rows: usize) -> Option<TelemetryWarning> {
+    rwp_capture::dropped_rows_notice(dropped_nonmonotonic_rows)
+        .map(|message| TelemetryWarning { message })
+}
+
 /// Blocking Windows session runner.
 ///
 /// The runner owns the capture lifecycle; the UI only observes its result.
@@ -352,6 +360,9 @@ impl SessionRunner {
             telemetry_warnings: &mut telemetry_warnings,
         };
         let (capture, interrupted, stop_outcome) = collect_capture(process, &mut capture_context)?;
+        if let Some(warning) = dropped_rows_warning(capture.dropped_nonmonotonic_rows) {
+            telemetry_warnings.push(warning);
+        }
 
         let coverage = build_coverage(&capture.frames, &system_samples);
         let capture_document = CaptureDocument {
@@ -556,6 +567,15 @@ mod tests {
             }
             Ok(SystemSample::new(1_000_000))
         }
+    }
+
+    #[test]
+    fn dropped_rows_warning_counts_without_failing() -> Result<(), Box<dyn std::error::Error>> {
+        assert!(super::dropped_rows_warning(0).is_none());
+        let warning = super::dropped_rows_warning(2).ok_or("dropped rows must warn")?;
+        assert!(warning.message.contains('2'));
+        assert!(warning.message.contains("backwards"));
+        Ok(())
     }
 
     #[test]

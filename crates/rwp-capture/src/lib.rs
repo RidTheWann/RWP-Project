@@ -11,5 +11,5 @@ pub use command::{
 
 #[cfg(windows)]
 pub use command::presentmon_child_creation_flags;
-pub use csv::{ParseMode, PresentMonCapture, PresentMonCsvParser};
+pub use csv::{ParseMode, PresentMonCapture, PresentMonCsvParser, dropped_rows_notice};
 pub use error::{PresentMonCaptureError, PresentMonConfigError, PresentMonCsvError};

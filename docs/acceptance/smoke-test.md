@@ -153,7 +153,9 @@ shareable sample:
    `Game.exe`) unless the exact process name is the point of the report.
 3. Confirm all rows share one `ProcessID` or document why PIDs change; the
    parser rejects PID changes by design.
-4. Confirm `CPUStartQPC` is non-decreasing; the parser rejects backwards QPC.
+4. Note any `CPUStartQPC` rows that move backwards (real multi-threaded output
+   does this occasionally); the parser drops and counts them instead of
+   failing, and PID changes are still rejected by design.
 5. Delete any trailing partial line if the capture was killed mid-flush, or
    keep it only to repro tolerant-tail handling (note which mode you used).
 6. Run `import-presentmon` on the anonymized copy and confirm it parses before
