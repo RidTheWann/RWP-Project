@@ -35,7 +35,10 @@ fn main() -> Result<(), tauri::Error> {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let guard = window.state::<commands::WindowCloseGuard>();
-                if guard.allow_close.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                if guard
+                    .allow_close
+                    .swap(false, std::sync::atomic::Ordering::AcqRel)
+                {
                     return;
                 }
                 api.prevent_close();

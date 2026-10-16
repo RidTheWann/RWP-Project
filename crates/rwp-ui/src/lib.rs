@@ -346,7 +346,10 @@ pub fn stable_notification_content_for_language(
     if language.eq_ignore_ascii_case("id") {
         Some((
             String::from("Hasil pengukuran stabil"),
-            format!("{} observasi; tidak ada peristiwa stutter; perubahan dalam batas.", stable.sample_count),
+            format!(
+                "{} observasi; tidak ada peristiwa stutter; perubahan dalam batas.",
+                stable.sample_count
+            ),
         ))
     } else {
         stable_notification_content(diagnostics)
@@ -549,7 +552,8 @@ mod tests {
     }
 
     #[test]
-    fn localized_stable_notification_never_includes_identity() -> Result<(), Box<dyn std::error::Error>> {
+    fn localized_stable_notification_never_includes_identity()
+    -> Result<(), Box<dyn std::error::Error>> {
         let diagnostic = rwp_core::Diagnostic::new(
             rwp_core::DiagnosticCategory::Stable,
             String::from("stability.v1"),
@@ -560,9 +564,8 @@ mod tests {
             64,
             60,
         )?;
-        let (title, body) =
-            super::stable_notification_content_for_language(&[diagnostic], "id")
-                .ok_or("Stable verdict must produce localized copy")?;
+        let (title, body) = super::stable_notification_content_for_language(&[diagnostic], "id")
+            .ok_or("Stable verdict must produce localized copy")?;
         assert_eq!(title, "Hasil pengukuran stabil");
         assert!(body.starts_with("64 observasi;"));
         assert!(!body.contains("PID"));

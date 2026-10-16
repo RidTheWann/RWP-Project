@@ -222,11 +222,7 @@ fn completion_notification_content(language: &str) -> (&'static str, &'static st
 }
 
 /// Best-effort native delivery; Windows host policy may suppress notifications.
-fn show_native_notification<R: Runtime>(
-    app: &Option<&AppHandle<R>>,
-    title: &str,
-    body: &str,
-) {
+fn show_native_notification<R: Runtime>(app: &Option<&AppHandle<R>>, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     let Some(app) = app else { return };
     let _notified = app
@@ -784,7 +780,10 @@ pub fn session_preflight(
     let component_ready = presentmon_executable.as_deref().is_some_and(|value| {
         let path = Path::new(value);
         path.is_absolute()
-            && path.file_name().is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("PresentMon.exe"))
+            && path.file_name().is_some_and(|name| {
+                name.to_string_lossy()
+                    .eq_ignore_ascii_case("PresentMon.exe")
+            })
             && path.metadata().is_ok_and(|metadata| metadata.is_file())
             && path.canonicalize().is_ok()
     });
@@ -793,7 +792,11 @@ pub fn session_preflight(
             && rwp_system::list_processes()
                 .is_ok_and(|entries| entries.iter().any(|entry| entry.process_id == target))
     });
-    SessionPreflight { permission_ready, component_ready, process_ready }
+    SessionPreflight {
+        permission_ready,
+        component_ready,
+        process_ready,
+    }
 }
 
 #[cfg(windows)]
@@ -824,7 +827,8 @@ fn error_kind_for_message(message: &str) -> &'static str {
         ("unsupported PresentMon version", "version"),
         ("PresentMon.exe", "presentmon_name"),
     ];
-    marker.iter()
+    marker
+        .iter()
         .find_map(|(needle, kind)| message.contains(needle).then_some(*kind))
         .unwrap_or("unknown")
 }
@@ -843,7 +847,8 @@ pub fn session_close_confirmed(
         }
     }
     close_guard.allow_close.store(true, Ordering::Release);
-    let window = app.get_webview_window("main")
+    let window = app
+        .get_webview_window("main")
         .ok_or_else(|| "main window is unavailable".to_owned())?;
     if let Err(error) = window.close() {
         close_guard.allow_close.store(false, Ordering::Release);
@@ -1039,7 +1044,8 @@ mod audit_regressions {
     use super::{SessionManager, SessionSnapshot, fail_session_worker_spawn, run_session_worker};
 
     #[test]
-    fn default_notification_language_is_backward_compatible() -> Result<(), Box<dyn std::error::Error>> {
+    fn default_notification_language_is_backward_compatible()
+    -> Result<(), Box<dyn std::error::Error>> {
         let request: super::SessionStartRequest = serde_json::from_str(
             r#"{"presentmon_executable":"PresentMon.exe","output_file":"capture.csv","process_id":42,"duration_seconds":10}"#,
         )?;
@@ -1061,9 +1067,18 @@ mod audit_regressions {
 
     #[test]
     fn error_kinds_cover_known_cases_and_unknown_fallback() {
-        assert_eq!(super::error_kind_for_message("invalid PresentMon.exe path"), "presentmon_name");
-        assert_eq!(super::error_kind_for_message("permission denied"), "permission");
-        assert_eq!(super::error_kind_for_message("an unrecognized failure"), "unknown");
+        assert_eq!(
+            super::error_kind_for_message("invalid PresentMon.exe path"),
+            "presentmon_name"
+        );
+        assert_eq!(
+            super::error_kind_for_message("permission denied"),
+            "permission"
+        );
+        assert_eq!(
+            super::error_kind_for_message("an unrecognized failure"),
+            "unknown"
+        );
     }
 
     #[test]
