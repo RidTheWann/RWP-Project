@@ -114,7 +114,7 @@ class UiContractTests(unittest.TestCase):
         self.assertIn('stutters === null', self.js)
 
     def _css_var(self, name: str) -> str:
-        match = re.search(rf"--{re.escape(name)}:\s*(#[0-9A-Fa-f]{6})", self.css)
+        match = re.search(rf"--{re.escape(name)}:\s*(#[0-9A-Fa-f]{{6}})", self.css)
         self.assertIsNotNone(match, f"CSS variable --{name} must be a six-digit color")
         return match.group(1)
 

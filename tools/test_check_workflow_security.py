@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from check_workflow_security import check_workflow
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 VALID_WORKFLOW = """name: CI
@@ -29,6 +32,37 @@ jobs:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+
+    @staticmethod
+    def _step_block(workflow: str, step_name: str) -> str:
+        marker = f"      - name: {step_name}\n"
+        start = workflow.find(marker)
+        if start < 0:
+            raise AssertionError(f"workflow step {step_name!r} is missing")
+        next_step = workflow.find("\n      - name:", start + len(marker))
+        return workflow[start:] if next_step < 0 else workflow[start:next_step]
+
+    def test_multi_command_gate_steps_fail_fast_on_windows(self) -> None:
+        cases = {
+            ROOT / ".github" / "workflows" / "ci.yml": [
+                "Install gate tools",
+                "Schemas, docs, links",
+            ],
+            ROOT / ".github" / "workflows" / "release-alpha.yml": [
+                "Gates (same order as local-gates.md)",
+                "Install gate tools",
+                "Dependency policy + audit",
+                "Schemas, docs, links",
+            ],
+        }
+        for workflow_path, step_names in cases.items():
+            workflow = workflow_path.read_text(encoding="utf-8")
+            for step_name in step_names:
+                with self.subTest(workflow=workflow_path.name, step=step_name):
+                    block = self._step_block(workflow, step_name)
+                    self.assertIn("shell: bash", block)
+                    self.assertIn("set -euo pipefail", block)
+
     def test_accepts_environment_passed_refs_and_read_only_token(self) -> None:
         self.assertEqual(check_workflow(VALID_WORKFLOW), [])
 

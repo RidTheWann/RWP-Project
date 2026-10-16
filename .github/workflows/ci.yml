@@ -65,7 +65,9 @@ jobs:
         run: cargo test --workspace --all-features --locked
 
       - name: Install gate tools
+        shell: bash
         run: |
+          set -euo pipefail
           cargo install cargo-deny --locked --version 0.20.2
           cargo install cargo-audit --locked --version 0.22.2
 
@@ -84,7 +86,9 @@ jobs:
         run: python tools/check_workflow_security.py
 
       - name: Schemas, docs, links
+        shell: bash
         run: |
+          set -euo pipefail
           pip install jsonschema
           python tools/validate_schemas.py
           python tools/check_docs.py
