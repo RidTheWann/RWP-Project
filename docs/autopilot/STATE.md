@@ -1,8 +1,8 @@
 ---
 plan_version: 1
-last_updated: 2026-10-16T20:51:00+07:00
-repo_ref: "main @ 410f33f (managed-output cleanup + close-event ACL; contract tests/docs follow in next commit)"
-active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; post-follow-up CI pending; packaged Windows smoke UNVERIFIED)"
+last_updated: 2026-10-16T20:57:00+07:00
+repo_ref: "main @ 63e6388 (UI contract tests/docs; cleanup regression test compile fix in this commit)"
+active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; latest Clippy failure corrected; rerun pending; packaged Windows smoke UNVERIFIED)"
 ---
 
 ## Status WP (product code targets 0.5.0-beta; historical WP/RC entries and their evidence remain preserved; UX redesign implementation/documentation committed; post-follow-up CI pending; hardware acceptance remains BLOCKED_ON_USER)
@@ -69,6 +69,8 @@ active_wp: "UX-REDESIGN-0.5.0-beta (candidate committed; post-follow-up CI pendi
 | RC-12 | BLOCKED_ON_USER | Hardware acceptance matrix required; not run. |
 
 ## Log (terbaru di atas; CI-era entries archived — see docs/autopilot/archive/STATE-ci-history.md)
+
+- 2026-10-16 CI regression follow-up: run 38911513175 on 410f33f passed fmt but Clippy failed in the newly added managed-output cleanup test with E0433 (unresolved `fs` in the nested test module). Root cause was the test's unqualified file-write helper, not runtime code or a weakened gate; corrected to `std::fs::write`. Run 38911904206 on 63e6388 must be checked separately because it was queued before this fix. The previous fully green run 38902154614 was on older HEAD 1896d4d only.
 
 - 2026-10-16 UX-REDESIGN-FOLLOWUP (directly on main): corrected managed-output cleanup to run on normal return and worker unwind via RAII, added its regression test, and explicitly included `core:event:default` for the main-window close listener. Added static UI contract tests for DOM-ID references, local-only web assets/CSP, Advanced-only PresentMon path, IPC request field parity, and close-event permissions; updated GUI acceptance and CHANGELOG. Last fully green CI before this follow-up: run 38902154614 on main @ 1896d4d (Windows gates PASS: fmt, Clippy, tests, deny, audit, schema/docs/unit/links/workflow-security; Windows debug workspace build PASS). That result does not cover commits after 1896d4d; CI for this candidate must be checked on its actual HEAD. No local checkout-based gate was run in this execution. Packaged NSIS/manual GUI smoke, installed notifications, high-DPI/accessibility contrast and real PresentMon/hardware acceptance remain UNVERIFIED/BLOCKED_ON_USER. GitHub tag/pre-release publication remains pending.
 

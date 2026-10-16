@@ -1112,7 +1112,7 @@ mod audit_regressions {
             std::process::id(),
             super::now_unix_ms()
         ));
-        fs::write(&path, b"temporary PresentMon output")?;
+        std::fs::write(&path, b"temporary PresentMon output")?;
         drop(super::ManagedOutputCleanup(path.clone()));
         assert!(!path.exists());
         Ok(())
