@@ -2,19 +2,15 @@
 
 [[permission]]
 identifier = "session-commands"
-description = "Allows the main window to invoke only the registered session application commands."
+description = "Allows the main window to invoke exactly the session commands the webview calls (least privilege; uninvoked backend commands stay registered but ungranted)."
 commands.allow = [
-  "session_start",
   "session_stop",
   "session_status",
-  "session_reset",
   "session_history",
   "session_history_load",
   "session_compare",
   "session_processes",
   "session_pick_presentmon_file",
-  "session_pick_output_file",
-  "session_error_remediation",
     "session_start_managed",
     "session_preflight",
     "session_error_kind",

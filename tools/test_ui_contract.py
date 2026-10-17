@@ -177,6 +177,19 @@ class UiContractTests(unittest.TestCase):
             (TAURI / "src" / "main.rs").read_text(encoding="utf-8"),
         )
 
+    def test_allowlist_equals_ui_invoked_commands(self) -> None:
+        toml_text = (TAURI / "permissions" / "default.toml").read_text(encoding="utf-8")
+        match = re.search(r"commands\.allow = \[(?P<body>.*?)\]", toml_text, flags=re.DOTALL)
+        self.assertIsNotNone(match, "session-commands allowlist is missing")
+        allowed = set(re.findall(r'"(session_\w+)"', match.group("body")))
+        invoked = set(re.findall(r'invoke\("(\w+)"', self.js))
+        invoked.update(re.findall(r"invoke\('(\w+)'", self.js))
+        self.assertEqual(
+            sorted(allowed),
+            sorted(invoked),
+            "webview grant must equal exactly the invoked command set (least privilege)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

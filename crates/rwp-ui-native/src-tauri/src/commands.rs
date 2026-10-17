@@ -1389,8 +1389,27 @@ mod audit_regressions {
         commands
     }
 
+    fn frontend_invoked_commands(frontend: &str) -> Vec<String> {
+        let mut invoked = Vec::new();
+        let mut rest = frontend;
+        while let Some((_, tail)) = rest.split_once("invoke(\"") {
+            if let Some((name, tail)) = tail.split_once('"') {
+                invoked.push(name.to_owned());
+                rest = tail;
+            } else {
+                break;
+            }
+        }
+        invoked.sort();
+        invoked.dedup();
+        invoked
+    }
+
     #[test]
-    fn app_manifest_and_capability_allow_only_registered_application_commands() {
+    fn app_manifest_matches_registered_and_capability_matches_frontend_invokes() {
+        // Least privilege (Batch 5): the backend keeps every registered command
+        // (manifest == invoke_handler), but the webview is granted exactly the
+        // commands its frontend invokes — no more, no fewer.
         let registered = sorted(registered_app_commands(include_str!("main.rs")));
         let manifest = sorted(quoted_items_after(
             include_str!("../build.rs"),
@@ -1400,14 +1419,15 @@ mod audit_regressions {
             include_str!("../permissions/default.toml"),
             "commands.allow = [",
         ));
+        let invoked = frontend_invoked_commands(include_str!("../../web/app.js"));
 
         assert_eq!(
             manifest, registered,
             "build.rs AppManifest command set must match invoke_handler"
         );
         assert_eq!(
-            capability, registered,
-            "main capability permission set must match invoke_handler"
+            capability, invoked,
+            "main capability permission set must equal exactly the frontend-invoked commands"
         );
     }
 
