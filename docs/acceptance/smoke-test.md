@@ -161,8 +161,11 @@ shareable sample:
 6. Run `import-presentmon` on the anonymized copy and confirm it parses before
    sending it. Attach only the anonymized file plus the redacted `summary.md`.
 
-Synthetic fixtures under `crates/**/fixtures` are already anonymized and
-minimal. They prove tooling only.
+Fixtures under `crates/**/fixtures` are anonymized and minimal; they prove
+tooling only. `crates/rwp-capture/tests/fixtures/real-capture-v2-anonymized.csv`
+follows this policy on a real 2026-10-17 capture (Application renamed,
+windowed to 320 rows); the raw capture stays local and is the acceptance
+evidence, never the fixture.
 
 ## Evidence status
 
@@ -170,9 +173,14 @@ minimal. They prove tooling only.
   `tools/smoke-test.ps1 -CsvPath
   crates/rwp-cli/tests/fixtures/minimal-presentmon-v2.csv`; summary header is
   `SYNTHETIC FIXTURE - NOT ACCEPTANCE EVIDENCE`; redaction self-check passes.
-- Real PresentMon v2 flow (`doctor` with a versioned executable, live or real
-  CSV `import`/`capture` → `analyze` → `report` → two-session `compare`,
-  manifest hashes, hardware matrix): `BLOCKED_ON_USER`. Nothing was faked.
+- Real PresentMon v2 flow: DONE 2026-10-17 (elevated live CLI capture,
+  PresentMon 2.6.0): `doctor` EXIT 0 (permissions ok under elevation), two
+  60 s `dwm.exe` captures EXIT 0, `analyze`/`report`/`compare` EXIT 0 with
+  manifest hashes recorded in `docs/acceptance/2026-10-17.md`; anonymized
+  regression fixture landed at
+  `crates/rwp-capture/tests/fixtures/real-capture-v2-anonymized.csv`.
+  Hardware acceptance matrix and the GUI cancel drill remain
+  `BLOCKED_ON_USER`. Nothing was faked.
 
 See also: `gui.md` (manual GUI checklist) and `../release/README.md` (local
 release artifacts index).

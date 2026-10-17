@@ -4,6 +4,9 @@ use std::{fs, process::Command};
 
 const FIXTURE: &str = include_str!("fixtures/minimal-presentmon-v2.csv");
 
+const REAL_CAPTURE_FIXTURE: &str =
+    include_str!("../../rwp-capture/tests/fixtures/real-capture-v2-anonymized.csv");
+
 fn run_rwp(arguments: &[&str]) -> Result<std::process::Output, std::io::Error> {
     Command::new(env!("CARGO_BIN_EXE_rwp"))
         .args(arguments)
@@ -404,6 +407,81 @@ fn import_refresh_rate_and_analyze_preserve_v2_and_interruption()
         ])?;
         assert!(!bad.status.success(), "{rate}: {bad:?}");
     }
+
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
+fn real_capture_window_pipeline_import_analyze_report() -> Result<(), Box<dyn std::error::Error>> {
+    // Anonymized window of the 2026-10-17 live dwm.exe capture; see
+    // docs/acceptance/2026-10-17.md and the rwp-capture parser regression.
+    let root = std::env::temp_dir().join(format!("rwp-cli-e2e-real-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root)?;
+    let csv = root.join("real-window.csv");
+    let imported = root.join("imported");
+    let analyzed = root.join("analyzed");
+    let report = root.join("report.json");
+    fs::write(&csv, REAL_CAPTURE_FIXTURE)?;
+
+    let import = run_rwp(&[
+        "import-presentmon",
+        csv.to_str().ok_or("invalid csv path")?,
+        "--process-id",
+        "8852",
+        "--qpc-frequency-hz",
+        "10000000",
+        "--output-dir",
+        imported.to_str().ok_or("invalid imported path")?,
+    ])?;
+    assert!(import.status.success(), "{import:?}");
+    let import_stderr = String::from_utf8(import.stderr)?;
+    assert!(
+        import_stderr.contains("dropped 32 rows with backwards QPC timestamps"),
+        "{import_stderr}"
+    );
+
+    let analyze = run_rwp(&[
+        "analyze",
+        "--session",
+        imported.to_str().ok_or("invalid imported path")?,
+        "--output-dir",
+        analyzed.to_str().ok_or("invalid analyzed path")?,
+    ])?;
+    assert!(analyze.status.success(), "{analyze:?}");
+
+    let report_run = run_rwp(&[
+        "report",
+        "--session",
+        analyzed.to_str().ok_or("invalid analyzed path")?,
+        "--format",
+        "json",
+        "--output",
+        report.to_str().ok_or("invalid report path")?,
+    ])?;
+    assert!(report_run.status.success(), "{report_run:?}");
+    let report_json: serde_json::Value = serde_json::from_slice(&fs::read(&report)?)?;
+    assert_eq!(report_json["schema_version"], "rwp.report.v2");
+    assert_eq!(report_json["frame_count"], 255);
+    assert_eq!(report_json["interrupted"], false);
+
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(imported.join("manifest.json"))?)?;
+    assert_eq!(manifest["process_id"], 8852);
+    assert_eq!(manifest["discarded_frame_count"], 33);
+    assert_eq!(manifest["provenance"]["qpc_frequency_hz"], 10000000);
+    let capture: serde_json::Value =
+        serde_json::from_slice(&fs::read(imported.join("capture.json"))?)?;
+    let frames = capture["frames"]
+        .as_array()
+        .ok_or("capture frames missing")?;
+    assert_eq!(frames.len(), 255);
+    assert!(
+        frames
+            .windows(2)
+            .all(|pair| pair[0]["timestamp_ns"].as_u64() <= pair[1]["timestamp_ns"].as_u64())
+    );
 
     fs::remove_dir_all(root)?;
     Ok(())

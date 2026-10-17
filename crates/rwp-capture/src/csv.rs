@@ -942,6 +942,34 @@ mod tests {
         Ok(())
     }
 
+    const REAL_CAPTURE_V2_ANONYMIZED: &str =
+        include_str!("../tests/fixtures/real-capture-v2-anonymized.csv");
+
+    #[test]
+    fn real_capture_window_drops_backwards_rows_and_keeps_monotonic_frames()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // Anonymized 320-row window of the 2026-10-17 live dwm.exe capture
+        // (PresentMon 2.6.0, QPC 10 MHz; see docs/acceptance/2026-10-17.md):
+        // 32 backwards-QPC rows dropped, 33 rows outside the dominant swap
+        // chain discarded, 255 frames kept with non-decreasing timestamps.
+        let parser = PresentMonCsvParser::new(10_000_000)?;
+        let capture = parser.parse_reader(
+            REAL_CAPTURE_V2_ANONYMIZED.as_bytes(),
+            &PresentMonTarget::ProcessId(8852),
+        )?;
+        assert_eq!(capture.process_id, 8852);
+        assert_eq!(capture.frames.len(), 255);
+        assert_eq!(capture.dropped_nonmonotonic_rows, 32);
+        assert_eq!(capture.discarded_frame_count, 33);
+        assert!(
+            capture
+                .frames
+                .windows(2)
+                .all(|pair| pair[0].timestamp_ns <= pair[1].timestamp_ns)
+        );
+        Ok(())
+    }
+
     #[test]
     fn resource_limits_accept_the_boundary_and_reject_overflow() {
         assert!(super::validate_csv_size(super::MAX_CSV_BYTES).is_ok());
