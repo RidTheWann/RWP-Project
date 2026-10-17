@@ -1,9 +1,9 @@
 # Project Ledger (milestone history; authoritative live status is docs/autopilot/STATE.md)
 
-## Snapshot (0.4.0 post-alpha; for live WP/AUD/RC status see docs/autopilot/STATE.md)
+## Snapshot (0.5.0-beta candidate; for live WP/AUD/RC status see docs/autopilot/STATE.md)
 
 - Milestone history ends at M10 below; current state (Fase 0-7 done, post-alpha console-stop work in, hardware/sign-off blocked) lives in docs/autopilot/STATE.md.
-- Workspace version: 0.4.0 (post-alpha; alpha 0.1.0-0.3.0 records frozen per docs/local-gates.md §5)
+- Workspace version: 0.5.0-beta (candidate; alpha 0.1.0-0.3.0 and beta 0.4.0-beta records frozen per docs/local-gates.md §5)
 - MSRV: Rust 1.99.0 (aligned with the pinned test toolchain; every gate runs on 1.99.0)
 - Development toolchain: Rust 1.99.0 (pinned; every gate uses --locked)
 - Primary target: x86_64-pc-windows-msvc
@@ -257,5 +257,5 @@ M10 PR #21 was squash-merged after CI run #211 completed successfully. Both `Rus
 ## Next
 
 - M11 source is not defined in the current repository roadmap; do not invent a milestone until an authoritative roadmap/spec entry exists.
-- Preserve the product invariant: Measure -> Analyze -> Diagnose -> Compare -> Explain -> Recommend -> Optimize.
+- Preserve the capability-order invariant: Measure -> Analyze -> Diagnose -> Compare -> Explain -> Recommend -> Optimize (later capabilities only after earlier ones ship); the shipped pipeline currently ends at Explain.
 - Keep optimization behavior and causal claims out of scope until their evidence and product contracts are explicitly defined.

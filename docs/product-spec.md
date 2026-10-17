@@ -1,12 +1,16 @@
 # Product Specification
 
-RidTheWann Performance (rwp) is an evidence-based gaming and streaming performance analyzer for Windows 11.
+RidTheWann Performance (rwp) is an evidence-based gaming performance analyzer for Windows 11.
 
 Tagline: Measure. Diagnose. Prove.
 
-Capability order is a product invariant:
+Capabilities ship in this order; the order is a product invariant (a later
+capability may only be added after the earlier ones ship):
 
 Measure -> Analyze -> Diagnose -> Compare -> Explain -> Recommend -> Optimize
+
+Shipped today ends at Explain: Recommend and Optimize are future milestones
+with no outputs in the current product.
 
 M1 scope:
 - platform-neutral normalized data contracts;
@@ -29,7 +33,8 @@ Implemented through M8 foundation:
 - Tauri session IPC and native dashboard integration.
 
 Out of scope until later milestones:
-- optimization behavior;
+- recommendation and optimization outputs (the shipped pipeline ends at Explain);
+- streaming-specific attribution (no encoder telemetry exists; `streaming_overhead` never fires);
 - causal claims from single captures or uncontrolled comparisons;
 - automated process discovery and richer Windows capture configuration UI;
 - installer/release packaging.
@@ -42,7 +47,7 @@ Core guarantees:
 - evidence score is never presented as a probability;
 - Unknown is a valid outcome.
 
-Reference observer budget for later capture validation:
-- average CPU overhead below 1.0% over a steady 60-second capture;
-- P99 instantaneous overhead below 2.0%;
+Reference observer budget for later capture validation (RC-05 wording):
+- average total CPU overhead at or below 1.0% over a steady capture at the default 50 ms cadence;
+- p99 single-sample sampler duration at or below 2 ms at the default interval;
 - no unbounded allocation growth in steady-state capture.

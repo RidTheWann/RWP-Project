@@ -36,6 +36,7 @@ Accepted and reconstructed decisions currently relevant to implementation:
 - ADR-0032: graceful PresentMon stop without a caller console (amends ADR-0015)
 - ADR-0035: unknown PresentMon version (amends ADR-0016)
 - ADR-0036: drop isolated out-of-order QPC rows (refines AUD-07)
+- ADR-0037: sampler overhead default — system-only default with full probing opt-in (accepted 2026-10-17; implementation rides the next versioned change)
 
 ADR-0001..0008 and ADR-0011..0013 are reconstructed from the project ledger and implementation contracts; reconstruction status is explicit in each record.
 

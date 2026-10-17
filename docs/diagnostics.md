@@ -155,3 +155,11 @@ provenance; older v2 manifests without this field remain readable.
 This reduces RWP's extra process inspection but is not a guarantee of anti-cheat
 compatibility: PresentMon still observes the requested target process. Hardware and
 anti-cheat acceptance remain pending.
+
+Concretely, the opt-out removes the `cpu.target_thread` support from
+`cpu_bound.v1`, disables `background_interference.v2`, removes the
+`gpu.utilization` support from `gpu_bound.v2`, and disables `thermal.v2` and
+`VramPressure` (each degrades to Unknown/insufficient rather than firing).
+Frame shares, GPUBusy, stutter, frame-pacing, and stability verdicts are
+unaffected because they derive from the PresentMon capture. The full per-mode
+evidence table lives in ADR-0037.

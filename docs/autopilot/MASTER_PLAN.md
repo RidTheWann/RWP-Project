@@ -8,18 +8,22 @@
 There is one working tree and no other topology:
 
 - All implementation, fixes, tests, documentation, audits, and release
-  preparation happen directly in the tree. Never create branches of any kind.
+  preparation happen directly in the tree, on `main`. Never create working
+  branches of any kind. Commit, push, and tag only on explicit owner order.
 - There is no promotion flow, no merge-back, no freeze, no trailers, and no
   skip markers. Since 2026-10-16 (owner order) `.github/workflows/` holds
   `ci.yml` (gates + debug build per push/PR) and `release-alpha.yml`
-  (tag-only NSIS pre-release) as a supplement; the per-batch local gate on
-  the pinned 1.99.0 toolchain remains the verification
-  (`docs/local-gates.md`).
+  (tag-only NSIS pre-release, published as GitHub Release) as a supplement;
+  the per-batch local gate on the pinned 1.99.0 toolchain remains the
+  verification authority (`docs/local-gates.md`).
 - Every batch follows: work (tests first) → full local gate → owner audit →
   record in `docs/autopilot/STATE.md` (+ CHANGELOG only for user-facing
   changes). No verification claim without pasted command output.
-- The `.git` directory on disk is dormant: never used, never read, never
-  removed without an explicit owner order.
+- Git is used for publish and tree-cleanliness checks only: commit/push/tag
+  on explicit owner order (`main` only), `git status` to guard a clean tree
+  before gates. Never use `git log`/`git diff` output as proof of behavior;
+  verify via direct file reads plus pasted gate output. Never remove the
+  `.git` directory without an explicit owner order.
 
 ## 1. Definisi "siap release & matang" (Release Criteria)
 
@@ -42,7 +46,7 @@ v1.0.0 hanya dicatat (CHANGELOG + provenance) jika SEMUA kriteria ini terpenuhi 
 
 ## 2. Baseline dan temuan audit (AUD)
 
-Baseline: workspace 10 crate, versi 0.4.0 (post-alpha; alpha 0.1.0-0.3.0 frozen), edition 2024, MSRV 1.99, toolchain 1.99.0, target `x86_64-pc-windows-msvc`. Milestone M1–M8 terimplementasi, M10 baru fondasi packaging.
+Baseline: workspace 10 crate, versi 0.5.0-beta (kandidat; alpha 0.1.0-0.3.0 dan beta 0.4.0-beta frozen), edition 2024, MSRV 1.99, toolchain 1.99.0, target `x86_64-pc-windows-msvc`. Milestone M1–M8 terimplementasi, M10 baru fondasi packaging.
 
 PENTING: temuan di bawah berasal dari analisis statis (belum dikompilasi). **Verifikasi ulang tiap AUD terhadap kode terkini sebelum memperbaikinya.** Jika sudah tidak berlaku, tandai `STALE` di STATE.md beserta alasannya.
 
@@ -82,7 +86,7 @@ Aturan umum semua WP:
 1. `Cargo.lock`: present in the source tree and validated with `--locked` on every gated command (historical note: the lockfile was committed during WP0; the tautological lockfile-generation CI step is long retired with CI itself).
 2. Gate lokal berurutan: `fmt --all -- --check`, `clippy --workspace --all-targets --all-features --locked -- -D warnings`, `test --workspace --all-features --locked`, `cargo deny check`, `cargo audit`, `validate_schemas.py`, `check_docs.py` + unit checker, di toolchain pin 1.99.0. Perintah persisnya di `docs/local-gates.md`.
 3. Job NSIS: build bundle Tauri lokal (versi `tauri-cli` tercatat), installer + `SHA256SUMS` sebagai artefak lokal yang dihash ke provenance (biner tak dikomit).
-4. Dependabot/rules/actions (dulu pin SHA): pensiun bersama CI; penggantinya adalah pin toolchain + `--locked` + kebijakan lisensi `deny.toml`/`about.toml` yang ditegakkan lokal.
+4. CI stays as a supplement (owner order 2026-10-16): `ci.yml` gates + debug build per push/PR and `release-alpha.yml` tag-only NSIS pre-release; Dependabot/action pins (full-SHA `uses`) remain enforced in `.github/workflows/`. The local authority is unchanged: pin toolchain + `--locked` + kebijakan lisensi `deny.toml`/`about.toml` yang ditegakkan lokal.
 5. Lint: aktifkan `clippy::undocumented_unsafe_blocks` (deny) dan tulis `// SAFETY:` di setiap blok `unsafe` di `rwp-system`.
 6. Sinkronkan dokumen: satu sumber status (ledger), README hanya menaut. Rekonstruksi ADR-0001..0014 yang hilang berdasarkan ledger dan kode (tandai "reconstructed"). Hapus section ganda. Buat `docs/schema/v1/` (lihat WP4).
 7. Skrip cek dokumen lokal: setiap ADR di indeks ada file-nya; milestone README = CHANGELOG terbaru; tautan relatif tidak patah (`tools/check_docs.py`, `tools/check_links.py`).
@@ -149,7 +153,7 @@ DoD: tes validasi path; target fuzz/proptest untuk parser; threat model ditinjau
 DoD: RC-03 dan RC-04 terpenuhi.
 
 ### WP7 — Rekayasa rilis (RC-09, RC-10)
-1. Kebijakan SemVer; CHANGELOG format Keep a Changelog; proses rilis lokal: build, test, NSIS, `SHA256SUMS`, SBOM (`cargo-cyclonedx`), `THIRD_PARTY_LICENSES` (`cargo-about`), attestation provenance build, draft catatan rilis dari CHANGELOG. Tanpa tag git, tanpa GitHub Release.
+1. Kebijakan SemVer; CHANGELOG format Keep a Changelog; proses rilis lokal: build, test, NSIS, `SHA256SUMS`, SBOM (`cargo-cyclonedx`), `THIRD_PARTY_LICENSES` (`cargo-about`), attestation provenance build, draft catatan rilis dari CHANGELOG. Rilis dipublikasikan lewat tag git + GitHub Release (pre-release) atas perintah owner.
 2. Penandatanganan Authenticode untuk exe + installer: BLOCKED_ON_USER (sertifikat atau layanan signing untuk OSS). Sebelum tersedia, dokumentasikan peringatan SmartScreen.
 3. ADR `webviewInstallMode` (bootstrapper vs offline installer WebView2) mengingat posisi offline-first.
 4. Tes installer lokal: silent install/uninstall, upgrade dari versi sebelumnya, lokasi data pengguna dipertahankan/dihapus sesuai pilihan.
@@ -167,7 +171,7 @@ README ditulis ulang dengan contoh hasil ukur nyata (berlabel jelas), instalasi,
 Freeze fitur; RC1; matriks akseptansi di hardware nyata (BLOCKED_ON_USER), dicatat di `docs/acceptance/<tanggal>.md`:
 - ≥2 mesin (idealnya NVIDIA + non-NVIDIA), ≥3 judul/API (DX11, DX12, Vulkan).
 - Skenario: baseline; beban CPU latar sengaja (harus memunculkan BackgroundInterference/CPU-bound dengan benar, dan tidak memunculkannya saat tanpa beban); stres GPU (GPU-bound); cancel di tengah run; PresentMon tanpa izin; game ditutup di tengah run; run 30 menit (memori stabil); jaringan diputus (tidak ada koneksi keluar); kalibrasi A/A.
-Daftar known issues; checklist go/no-go; catat `v1.0.0` di CHANGELOG + provenance hanya bila RC-01..RC-12 terpenuhi (tanpa tag git).
+Daftar known issues; checklist go/no-go; catat `v1.0.0` di CHANGELOG + provenance hanya bila RC-01..RC-12 terpenuhi; tag + GitHub Release atas perintah owner.
 
 ## 4. Gate umum (otoritas: `docs/local-gates.md`, berlaku di setiap batch)
 - `cargo fmt --all -- --check`
@@ -188,7 +192,7 @@ Kumpulkan semuanya dalam satu daftar, beri rekomendasi default, dan teruskan WP 
 ---
 plan_version: 1
 last_updated: <ISO-8601>
-repo_ref: not used (no-git policy; trail lives in Log + reports)
+repo_ref: main @ <sha> (publish ref; trail lives in Log + reports)
 active_wp: WP0
 ---
 ## Status WP
@@ -218,9 +222,9 @@ active_wp: WP0
 ```
 ## Autopilot execution rule — audit-first, local gates
 
-- All project work happens directly in the single working tree. Never create branches, and never use git for verification (no log/status/diff/commit/tag reads).
+- All project work happens directly in the single working tree, on `main`. Never create working branches. Commit, push, and tag only on explicit owner order, and never use git log/diff output as proof of behavior (no `git log`/`git diff` reads for verification claims).
 - Every batch runs: work (tests first) → full local gate in order → owner audit → record in STATE (+ CHANGELOG only for user-facing changes).
 - Local Rust verification is the gate, not an option: pinned 1.99.0 toolchain, formatting, lint, tests, schema, docs, dependency, and installer checks per `docs/local-gates.md`.
 - After a gate failure, inspect the exact failing output, fix the root cause, and re-run the full gate; never weaken tests or lint gates. Record the failure and the fix in STATE.
-- No claim without pasted command output. The `.git` directory stays dormant.
+- No claim without pasted command output. Git is used only for publish (on owner order) and tree-cleanliness checks (`git status` before gates).
 - Threat-model sign-off and release decisions belong to the owner; never sign unilaterally.

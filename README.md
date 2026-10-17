@@ -11,7 +11,7 @@
 > `docs/release/0.3.0-alpha.md`, `docs/release/0.2.0-alpha.md`,
 > `docs/release/0.1.0-alpha.md` (frozen).
 
-RidTheWann Performance (rwp) is an evidence-based gaming and streaming performance analyzer for Windows 11. It correlates frame timing with system state, detects reproducible failure patterns, and explains evidence without treating a heuristic score as probability.
+RidTheWann Performance (rwp) is an evidence-based gaming performance analyzer for Windows 11. It correlates frame timing with system state, detects reproducible failure patterns, and explains evidence without treating a heuristic score as probability. Streaming attribution is not shipped: no encoder telemetry exists and `streaming_overhead` never fires (see `docs/limitations.md`).
 
 > Measured example — single device, labeled (Windows 11 Build 26200 x64,
 > Ryzen 5 5600G, 16 GiB, non-admin, release profile, 50 ms cadence, ~211
@@ -25,9 +25,12 @@ RidTheWann Performance (rwp) is an evidence-based gaming and streaming performan
 
 ## Product boundary
 
-rwp follows this capability order:
+rwp ships capabilities in this invariant order, currently ending at Explain:
 
-Measure -> Analyze -> Diagnose -> Compare -> Explain -> Recommend -> Optimize
+Measure -> Analyze -> Diagnose -> Compare -> Explain
+
+Recommend and Optimize are roadmap direction, not shipped capability; nothing
+in rwp emits a recommendation or optimization output.
 
 The engine is deterministic and offline-first. Capture is out-of-process. There is no DLL injection, game hook, overlay dependency, account, or background telemetry requirement.
 

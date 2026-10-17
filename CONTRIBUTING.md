@@ -1,9 +1,12 @@
 # Contributing
 
-## Working method (local-first, no branches)
+## Working method (local-first, main only)
 
-There is one working tree and no branches, no promotion flow, no trailers, no
-skip markers, and no CI. Every batch follows the same loop:
+There is one working tree on `main`: no working branches, no promotion
+flow, no trailers, no skip markers. CI (`.github/workflows/ci.yml` gates +
+debug build, `release-alpha.yml` tag-only NSIS pre-release) runs as a
+supplement on owner order — never as verification authority. Commit, push,
+and tag only on explicit owner order. Every batch follows the same loop:
 
 1. **Work** — implement in the tree, tests first for behavior changes.
 2. **Gate** — run the full local gate in order (`docs/local-gates.md`,
@@ -12,8 +15,11 @@ skip markers, and no CI. Every batch follows the same loop:
 4. **Record** — paste gate output plus numbers into `docs/autopilot/STATE.md`;
    add a CHANGELOG bullet only for user-facing changes.
 
-The `.git` directory on disk is dormant: never read it, never write to it,
-never delete it without an explicit owner order.
+Git is used for publish and tree-cleanliness checks only: commit/push/tag on
+explicit owner order (`main` only), `git status` to guard a clean tree
+before gates. Never use `git log`/`git diff` output as proof of behavior;
+verify via direct file reads plus pasted gate output. Never remove the
+`.git` directory without an explicit owner order.
 
 ## Product invariants (never break these)
 
@@ -49,9 +55,10 @@ never delete it without an explicit owner order.
 - Do not weaken tests or lint gates to get green.
 - Do not invent measurements, hardware results, or provenance.
 - Do not commit binaries, secrets, private paths, or unredacted fixtures.
-- Do not touch `.git`, create branches, or reference CI runs, PRs, or
+- Do not touch `.git` history, create working branches, or commit/push/tag
+  without an explicit owner order; do not reference CI runs, PRs, or
   trailers as authority; per-batch local gates are the verification.
 
-Local hygiene (optional, no git involved): the advisory hook in `.githooks/`
-reports fmt and docs-checker failures before they reach the gate. It never
-rewrites files and never replaces gate runs.
+Local hygiene (optional): the advisory hook in `.githooks/` reports fmt and
+docs-checker failures before they reach the gate. It never rewrites files
+and never replaces gate runs.

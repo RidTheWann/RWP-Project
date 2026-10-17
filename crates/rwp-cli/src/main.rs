@@ -35,7 +35,7 @@ use rwp_session::{
 #[command(
     name = "rwp",
     version,
-    about = "Evidence-based Windows gaming and streaming performance analyzer"
+    about = "Evidence-based Windows gaming performance analyzer"
 )]
 struct Cli {
     /// Emit machine-readable JSON for command failures.

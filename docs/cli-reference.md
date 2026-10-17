@@ -1,4 +1,4 @@
-# CLI Reference (`rwp 0.4.0`)
+# CLI Reference (`rwp 0.5.0-beta`)
 
 Generated from the built binary, never hand-written:
 
@@ -12,7 +12,7 @@ Regenerate this file when CLI surface changes; the generator output is
 authoritative over this text.
 
 ```text
-Evidence-based Windows gaming and streaming performance analyzer
+Evidence-based Windows gaming performance analyzer
 
 Usage: rwp.exe [OPTIONS] <COMMAND>
 

@@ -37,6 +37,10 @@ claim is tested.
 
 ## Deferred categories and inputs
 
+- The shipped pipeline ends at Explain: no Recommend/Optimize output exists.
+  Remediation text shown for session failures is troubleshooting, not
+  optimization, and the capability order in `docs/product-spec.md` is an
+  ordering invariant, not a claim that those stages exist.
 - `streaming_overhead` never fires: no encoder telemetry exists to attribute
   against; background activity alone is not used as a proxy.
 - ETW and thread-cycle-time cross-checks need an admin session and have not

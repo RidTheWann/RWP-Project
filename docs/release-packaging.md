@@ -20,7 +20,7 @@ This preserves the existing out-of-process capture boundary and the product requ
 
 A release candidate is not considered ready until:
 1. the source-tree `Cargo.lock` is present and validated with `cargo --locked`;
-2. the Windows NSIS bundle is built successfully (locally per `docs/local-gates.md`; CI retired);
+2. the Windows NSIS bundle is built successfully (locally per `docs/local-gates.md`, with CI as supplement);
 3. the generated installer is retained as a local artifact with its SHA-256 (binaries are never committed);
 4. a Windows acceptance test launches the installed application and exercises a real live-session capture with a user-supplied PresentMon executable.
 

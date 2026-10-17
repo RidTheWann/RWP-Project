@@ -10,7 +10,7 @@ Entry format: one bullet per user-facing change under
 
 No user-facing changes yet since `0.5.0-beta`.
 
-## [0.5.0-beta] - 2026-10-16
+## [0.5.0-beta] - 2026-10-17
 
 ### Added
 - Redesign the native Windows UI around Home, exclusive countdown/recording/analyzing states, friendly results, history/Before-After comparison, and Settings/Advanced using local vanilla HTML/CSS/JavaScript.
@@ -20,12 +20,16 @@ No user-facing changes yet since `0.5.0-beta`.
 ### Changed
 - Keep PresentMon user-supplied per ADR-0028; hide executable/output paths, process IDs, and technical tuning from the ordinary player path.
 - Preserve engine-provided diagnostics and evidence in Expert details; use a conservative "Belum bisa disimpulkan" fallback when the existing output does not support a conclusion.
+- Align public scope wording with shipped capability: the shipped pipeline ends at Explain (no Recommend/Optimize outputs), streaming attribution stays future scope, and the observer budget now states the p99 bound as a single-sample duration (at or below 2 ms) matching RC-05.
 
 ### Fixed
 
 - Ensure the managed temporary PresentMon CSV is cleaned up when a capture worker returns or unwinds, and explicitly authorize the native window-close event listener used by the close-confirmation guard.
 - Keep the stability verdict Unknown unless `stability.v1` is present; do not infer instability from the existence of stutter rows, and render absent frame/stutter fields as unavailable rather than zero.
 - Preserve the active page when changing language; clear scenario confirmations and stale output when either comparison session changes; improve primary-button hover contrast to retain WCAG AA text contrast.
+
+### Security
+- Least privilege for the native UI: the webview capability now grants exactly the 11 commands the frontend actually invokes (4 unused session-command grants removed); backend commands and the registered command manifest are unchanged.
 
 ## [0.4.0-beta] - 2026-10-16
 
